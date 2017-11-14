@@ -10,9 +10,22 @@ ifeq ($(SGX_RUN),1)
 
 expand_target = $(foreach t,$(filter-out manifest,$(1)),$(patsubst %.manifest,%,$(t)).token)
 
+ifneq ($(OPENSGX),1)
+
 %.token: %.sig
 	@echo [ Token: $(patsubst %.token,%,$@) ]
 	@$(SGX_GET_TOKEN) -output $@ -sig $(patsubst %.token,%.sig,$@)
+
+else
+
+%.token: %.sig
+	@echo [ Token: $(patsubst %.token,%,$@) ]
+	$(SGX_DIR)/signer/pal-sgx-sig-to-opensgx -sig $(patsubst %.token,%.sig,$@) > $(basename $@).conf
+	$(OPENSGX_DIR)/user/sgx-tool -E $(basename $@).conf > $@.conf
+	$(OPENSGX_DIR)/user/sgx-tool -M $@.conf --key $(OPENSGX_DIR)/user/conf/device.key >> $(basename $@).conf
+	$(SGX_DIR)/signer/pal-sgx-get-token-opensgx -conf $(basename $@).conf -output $@
+
+endif
 
 else
 

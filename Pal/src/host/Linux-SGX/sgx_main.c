@@ -692,6 +692,7 @@ static int load_enclave (struct pal_enclave * enclave,
     pal_sec->start_time = tv.tv_sec * 1000000UL + tv.tv_usec;
 #endif
 
+#ifndef OPENSGX
     ret = open_gsgx();
     if (ret < 0) {
         SGX_DBG(DBG_E, "cannot open device /dev/gsgx, possibly the kernel "
@@ -704,6 +705,7 @@ static int load_enclave (struct pal_enclave * enclave,
         return ret;
     if (!ret)
         return -EPERM;
+#endif
 
     INLINE_SYSCALL(gettimeofday, 2, &tv, NULL);
     randval = tv.tv_sec * 1000000UL + tv.tv_usec;

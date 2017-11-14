@@ -11,11 +11,17 @@ enclave-objs = $(addprefix db_,files devices pipes sockets streams memory \
 		 exception misc ipc spinlock) \
 	       $(addprefix enclave_,ocalls ecalls framework pages untrusted) 
 enclave-asm-objs = enclave_entry 
-urts-objs = $(addprefix sgx_,enclave framework main rtld thread process exception graphene)
+urts-objs = $(addprefix sgx_,enclave main rtld thread process exception graphene)
 urts-asm-objs = sgx_entry
 graphene_lib = ../../.lib/graphene-lib.a
-headers	= $(wildcard *.h) $(wildcard ../../*.h) $(wildcard ../../../lib/*.h) \
-	  $(addprefix sgx-driver/,graphene-sgx.h isgx_version.h)
+headers	= $(wildcard *.h) $(wildcard ../../*.h) $(wildcard ../../../lib/*.h)
+
+ifeq ($(OPENSGX),1)
+urts-objs += opensgx_framework
+else
+urts-objs += sgx_framework
+headers += $(addprefix sgx-driver/,graphene-sgx.h isgx_version.h)
+endif
 
 all: $(host_files)
 
@@ -23,6 +29,10 @@ ifeq ($(DEBUG),1)
 CC += -gdwarf-2 -g3
 CFLAGS += -DDEBUG
 export DEBUG
+endif
+
+ifeq ($(OPENSGX),1)
+CFLAGS += -DOPENSGX
 endif
 
 ../../host_endian.h: host_endian.h
@@ -65,8 +75,10 @@ debugger/sgx_gdb.so: debugger/sgx_gdb.c debugger/sgx_gdb.h sgx_arch.h
 	$(CC) -Wall -fPIC -O2 -std=gnu99 -fgnu89-inline -c debugger/sgx_gdb.c -o debugger/sgx_gdb.o
 	$(LD) -shared debugger/sgx_gdb.o -o debugger/sgx_gdb.so -lc
 
+ifneq ($(OPENSGX),1)
 sgx-driver/isgx_version.h:
 	cd sgx-driver && make isgx_version.h
+endif
 
 clean:
 	rm -f *.o *.e $(host_files)

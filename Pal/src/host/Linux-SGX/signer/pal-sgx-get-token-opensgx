@@ -1,0 +1,142 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import re
+import struct
+
+""" Main Program """
+
+options = {
+#       Option name : (Required  Value)
+        'conf':    (True,    'opensgx conf file (*.conf)'),
+        'output':  (True,    'output file'),
+    }
+
+def usage():
+    usage_message = 'USAGE: ' + sys.argv[0] + ' -help|-h'
+
+    for opt, optval in options.items():
+        if not optval[0]:
+            usage_message += '['
+        usage_message += '|-' + opt
+        if optval[1]:
+            usage_message += ' <' + optval[1] + '>'
+        if not optval[0]:
+            usage_message += ']'
+
+    print >> sys.stderr, usage_message
+    os._exit(-1)
+
+def parse_args():
+    args = dict()
+    for opt, optval in options.items():
+        if not optval[1]:
+            args[opt] = False
+
+    i = 1
+    while i < len(sys.argv):
+        got = sys.argv[i]
+
+        if got == '-help' or got == '-h':
+            usage()
+
+        invalid = True
+        for opt, optval in options.items():
+            if got != '-' + opt:
+                continue
+
+            if optval[1] is not None:
+                i += 1
+                if i == len(sys.argv):
+                    print >>sys.stderr, "Option %s needs a value." % (opt)
+                    usage()
+                args[opt] = sys.argv[i]
+            else:
+                args[opt] = True
+
+            invalid = False
+            break
+
+        if invalid:
+            print >>sys.stderr, "Unknown option: %s." % (got[1:])
+            usage()
+        i += 1
+
+    for opt, optval in options.items():
+        if optval[0] and opt not in args:
+            print >>sys.stderr, "Must specify %s <%s>." % (opt, optval[1])
+            usage()
+
+    return args
+
+if __name__ == "__main__":
+
+    # Parse arguments
+    args = parse_args()
+
+    conf = open(args['conf'], "rb")
+
+    token_struct = dict()
+    parsing = False
+    var_group = ""
+    for line in conf.readlines():
+        line = line.rstrip('\n')
+        if not parsing:
+            if line == "# EINITTOKEN START":
+                parsing = True
+            continue
+        if line == "# EINITTOKEN END":
+            break
+
+        m = re.match("^(\S+)\s*:\s*([0-9A-F]+)$", line)
+        if m:
+            name = m.group(1)
+            val = m.group(2)
+            if name.startswith("."):
+                name = var_group + name
+            else:
+                var_group = ""
+            token_struct[name] = val
+            continue
+
+        var_group = line
+
+    # field format: (offset, type, value)
+    fields = dict()
+
+    FLAG_DEBUG      = 0x02
+    FLAG_MODE64BIT  = 0x04
+
+    XFRM_LEGACY     = 0x03
+    XFRM_AVX        = 0x06
+    XFRM_AVX3       = 0xe6
+    XFRM_MPX        = 0x18
+
+    def parse_token(key):
+        str = token_struct[key]
+        if len(str) % 2 == 1:
+            str = '0' + str
+        return str.decode('hex')[::-1]
+
+    fields['valid']     = (   0, "<L",  0x1)
+    fields['attrs']     = (  48, "<QQ", FLAG_DEBUG|FLAG_MODE64BIT, XFRM_LEGACY)
+    fields['mrencalve'] = (  64, "32s",  parse_token('MRENCLAVE'))
+    fields['mrsigner']  = ( 128, "32s",  parse_token('MRSIGNER'))
+
+    fields['cpusvn']    = ( 192, "4s",  parse_token('CPUSVNLE'))
+    fields['isvprodid'] = ( 208, "4s",  parse_token('ISVPRODIDLE'))
+    fields['isvsvn']    = ( 210, "4s",  parse_token('ISVSVNLE'))
+
+    fields['miscmask']  = ( 236, "<L",  0)
+    fields['attrmask']  = ( 240, "<QQ", FLAG_DEBUG|FLAG_MODE64BIT, XFRM_LEGACY)
+
+    fields['keyid']     = ( 256, "32s",  parse_token('KEYID'))
+    fields['mac']       = ( 288, "16s",  parse_token('MAC'))
+
+    token = bytearray(304)
+
+    for key, field in fields.items():
+        struct.pack_into(field[1], token, field[0], *field[2:])
+
+    open(args['output'], 'wb').write(token)

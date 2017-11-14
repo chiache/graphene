@@ -1,0 +1,156 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import re
+import struct
+
+def read_sigstruct(sig):
+    # field format: (offset, type, value)
+    fields = dict()
+
+    fields['date']      = (  20, "<HBB", 'year', 'month', 'day')
+
+    fields['modulus']   = ( 128, "384s", 'modulus')
+    fields['exponent']  = ( 512, "<L",   'exponent')
+    fields['signature'] = ( 516, "384s", 'signature')
+
+    fields['miscs']     = ( 900, "4s",   'miscs')
+    fields['miscmask']  = ( 904, "4s",   'miscmask')
+    fields['attrs']     = ( 928, "8s8s", 'flags', 'xfrms')
+    fields['attrmask']  = ( 944, "8s8s", 'flagmask', 'xfrmmask')
+    fields['mrencalve'] = ( 960, "32s",  'mrenclave')
+    fields['isvprodid'] = (1024, "<H",   'isvprodid')
+    fields['isvsvn']    = (1026, "<H",   'isvsvn')
+
+    attr = dict()
+    for key, field in fields.items():
+        values = struct.unpack_from(field[1], sig, field[0])
+
+        for i in range(len(values)):
+            attr[field[i + 2]] = values[i]
+
+    return attr
+
+""" Main Program """
+
+options = {
+#       Option name : (Required  Value)
+        'sig':    (True,    'signature file (*.sig)'),
+    }
+
+def usage():
+    usage_message = 'USAGE: ' + sys.argv[0] + ' -help|-h'
+
+    for opt, optval in options.items():
+        if not optval[0]:
+            usage_message += '['
+        usage_message += '|-' + opt
+        if optval[1]:
+            usage_message += ' <' + optval[1] + '>'
+        if not optval[0]:
+            usage_message += ']'
+
+    print >> sys.stderr, usage_message
+    os._exit(-1)
+
+def parse_args():
+    args = dict()
+    for opt, optval in options.items():
+        if not optval[1]:
+            args[opt] = False
+
+    i = 1
+    while i < len(sys.argv):
+        got = sys.argv[i]
+
+        if got == '-help' or got == '-h':
+            usage()
+
+        invalid = True
+        for opt, optval in options.items():
+            if got != '-' + opt:
+                continue
+
+            if optval[1] is not None:
+                i += 1
+                if i == len(sys.argv):
+                    print >>sys.stderr, "Option %s needs a value." % (opt)
+                    usage()
+                args[opt] = sys.argv[i]
+            else:
+                args[opt] = True
+
+            invalid = False
+            break
+
+        if invalid:
+            print >>sys.stderr, "Unknown option: %s." % (got[1:])
+            usage()
+        i += 1
+
+    for opt, optval in options.items():
+        if optval[0] and opt not in args:
+            print >>sys.stderr, "Must specify %s <%s>." % (opt, optval[1])
+            usage()
+
+    return args
+
+if __name__ == "__main__":
+
+    # Parse arguments
+    args = parse_args()
+
+    sigfile = open(args['sig'], "rb")
+    sig = sigfile.read()
+
+    print "# SIGSTRUCT START"
+
+    print "HEADER        :", sig[   0:  16].encode('hex').upper()
+    print "VENDOR        :", sig[  16:  20].encode('hex').upper()
+    print "DATE          :", sig[  20:  24][::-1].encode('hex').upper()
+    print "HEADER2       :", sig[  24:  40].encode('hex').upper()
+    print "SWDEFINO      :", sig[  40:  44].encode('hex').upper()
+    print "RESERVED1     :", sig[  44: 128].encode('hex').upper()
+    print "MODULUS       :", sig[ 128: 512][::-1].encode('hex').upper()
+    print "EXPONENT      :", sig[ 512: 516][::-1].encode('hex').upper()
+    print "SIGNATURE     :", sig[ 516: 900][::-1].encode('hex').upper()
+
+    print "MISCSELECT"
+    print ".EXINFO       :", '0'
+    print ".RESERVED     :", '0000000'
+    print "MISCMASK"
+    print ".EXINFO       :", '0'
+    print ".RESERVED     :", '0000000'
+    print "RESERVED2     :", sig[ 908: 928].encode('hex').upper()
+
+    print "ATTRIBUTES"
+    print ".RESERVED1    :", '0'
+    print ".DEBUG        :", '1'
+    print ".MODE64BIT    :", '1'
+    print ".RESERVED2    :", '0'
+    print ".PROVISIONKEY :", '1'
+    print ".EINITTOKENKEY:", '0'
+    print ".RESERVED3    :", sig[ 928: 936].encode('hex').upper()[2:16] + '0'
+    print ".XFRM         :", sig[ 936: 944][::-1].encode('hex').upper()[0:16]
+
+    print "ATTRIBUTEMASK"
+    print ".RESERVED1    :", '0'
+    print ".DEBUG        :", '1'
+    print ".MODE64BIT    :", '1'
+    print ".RESERVED2    :", '0'
+    print ".PROVISIONKEY :", '1'
+    print ".EINITTOKENKEY:", '0'
+    print ".RESERVED3    :", sig[ 944: 952].encode('hex').upper()[2:16] + '0'
+    print ".XFRM         :", sig[ 952: 960][::-1].encode('hex').upper()[0:16]
+
+    print "ENCLAVEHASH   :", sig[ 960: 992][::-1].encode('hex').upper()
+    print "RESERVED3     :", sig[ 992:1024].encode('hex').upper()
+    print "ISVPRODID     :", sig[1024:1026][::-1].encode('hex').upper()
+    print "ISVSVN        :", sig[1026:1028][::-1].encode('hex').upper()
+    print "RESERVED4     :", sig[1028:1040][::-1].encode('hex').upper()
+
+    print "Q1            :", sig[1040:1424].encode('hex').upper()
+    print "Q2            :", sig[1424:1808].encode('hex').upper()
+
+    print "# SIGSTRUCT END"
