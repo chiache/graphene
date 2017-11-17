@@ -11,7 +11,7 @@
 
 void * zero_page;
 
-#define EPC_ADDR    0x4fffc000
+#define NUM_EPC    (128*1024*1024/4096)
 
 typedef unsigned char epc_t[PRESET_PAGESIZE];
 
@@ -138,7 +138,6 @@ void eextend(uint64_t pageChunk)
     encls(ENCLS_EEXTEND, 0x0, pageChunk, 0x0, NULL);
 }
 
-#if 0
 static
 void encls_qemu_init(uint64_t startPage, uint64_t endPage)
 {
@@ -173,7 +172,24 @@ void set_stack(uint64_t sp)
     // Set enclave stack pointer.
     encls(ENCLS_OSGX_SET_STACK, sp, 0x0, 0x0, NULL);
 }
-#endif
+
+int init_opensgx(void)
+{
+    init_epc(NUM_EPC);
+
+    encls_qemu_init(epc_heap_begin, epc_heap_end);
+
+    set_cpusvn(CPU_SVN);
+
+    zero_page = INLINE_SYSCALL(mmap, 6, NULL, pagesize,
+                               PROT_READ,
+                               MAP_PRIVATE|MAP_ANONYMOUS,
+                               -1, 0);
+    if (IS_ERR_P(zero_page))
+        return -ENOMEM;
+
+    return 0;
+}
 
 //
 // NOTE.
@@ -190,8 +206,7 @@ int init_epc (int nepc)
     //toward making g_num_epc configurable
     //g_epc = memalign(PAGE_SIZE, g_num_epc * sizeof(epc_t));
 
-    g_epc = (epc_t *)INLINE_SYSCALL(mmap, 6, (void *) EPC_ADDR,
-                                    g_num_epc * sizeof(epc_t),
+    g_epc = (epc_t *)INLINE_SYSCALL(mmap, 6, NULL, g_num_epc * sizeof(epc_t),
                                     PROT_READ|PROT_WRITE,
                                     MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
 
@@ -403,19 +418,6 @@ int create_enclave(sgx_arch_secs_t * secs,
                    unsigned long size,
                    sgx_arch_token_t * token)
 {
-    int flags = MAP_SHARED;
-
-    init_epc(128*1024*1024);
-
-    if (!zero_page) {
-        zero_page = (void *)
-            INLINE_SYSCALL(mmap, 6, NULL, pagesize,
-                           PROT_READ, MAP_PRIVATE|MAP_ANONYMOUS,
-                           -1, 0);
-        if (IS_ERR_P(zero_page))
-            return -ENOMEM;
-    }
-
     memset(secs, 0, sizeof(sgx_arch_secs_t));
     secs->size = pagesize;
     while (secs->size < size)
