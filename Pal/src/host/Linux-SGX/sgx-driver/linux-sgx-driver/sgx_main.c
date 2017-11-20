@@ -72,6 +72,10 @@
 #define DRV_DESCRIPTION "Intel SGX Driver (Dummy)"
 #define DRV_VERSION "0.10"
 
+// Hard-coding EPC address and size
+#define EPC_ADDR	(0x80200000)
+#define EPC_SIZE	(0x5d80000)
+
 #define ENCL_SIZE_MAX_64 (64ULL * 1024ULL * 1024ULL * 1024ULL)
 #define ENCL_SIZE_MAX_32 (2ULL * 1024ULL * 1024ULL * 1024ULL)
 
@@ -164,34 +168,7 @@ static struct miscdevice sgx_dev = {
 	.mode   = 0666,
 };
 
-static int sgx_pm_suspend(struct device *dev)
-{
-	struct sgx_tgid_ctx *ctx;
-	struct sgx_encl *encl;
-
-	kthread_stop(ksgxswapd_tsk);
-	ksgxswapd_tsk = NULL;
-
-	list_for_each_entry(ctx, &sgx_tgid_ctx_list, list) {
-		list_for_each_entry(encl, &ctx->encl_list, encl_list) {
-			sgx_invalidate(encl, false);
-			encl->flags |= SGX_ENCL_SUSPEND;
-			flush_work(&encl->add_page_work);
-		}
-	}
-
-	return 0;
-}
-
-static int sgx_pm_resume(struct device *dev)
-{
-	ksgxswapd_tsk = kthread_run(ksgxswapd, NULL, "kswapd");
-	return 0;
-}
-
-static SIMPLE_DEV_PM_OPS(sgx_drv_pm, sgx_pm_suspend, sgx_pm_resume);
-
-static int sgx_dev_init(struct device *dev)
+static __init int sgx_init(void)
 {
 	unsigned int wq_flags;
 	int ret;
@@ -199,19 +176,10 @@ static int sgx_dev_init(struct device *dev)
 
 	pr_info("intel_sgx: " DRV_DESCRIPTION " v" DRV_VERSION "\n");
 
-	if (boot_cpu_data.x86_vendor != X86_VENDOR_INTEL)
-		return -ENODEV;
-
-#define EPC_SIZE    (0x5d80000)
-
 	// hard-coded (from a real sgx machine)
 	sgx_nr_epc_banks = 1;
-	sgx_epc_banks[0].start = kmalloc(EPC_SIZE, GFP_KERNEL);
-	if (!sgx_epc_banks[0].start) {
-		pr_err("intel_sgx: dma_alloc_coherent() failed\n");
-		return -ENOMEM;
-	}
-	sgx_epc_banks[0].end = sgx_epc_banks[0].start + EPC_SIZE;
+	sgx_epc_banks[0].start = EPC_ADDR;
+	sgx_epc_banks[0].end = EPC_ADDR + EPC_SIZE;
 
 	pr_info("intel_sgx: Number of EPCs %d\n", sgx_nr_epc_banks);
 
@@ -246,7 +214,6 @@ static int sgx_dev_init(struct device *dev)
 		goto out_iounmap;
 	}
 
-	sgx_dev.parent = dev;
 	ret = misc_register(&sgx_dev);
 	if (ret) {
 		pr_err("intel_sgx: misc_register() failed\n");
@@ -264,12 +231,7 @@ out_iounmap:
 	return ret;
 }
 
-static int sgx_drv_probe(struct platform_device *pdev)
-{
-	return sgx_dev_init(&pdev->dev);
-}
-
-static int sgx_drv_remove(struct platform_device *pdev)
+static __exit void sgx_exit(void)
 {
 	int i;
 
@@ -280,40 +242,9 @@ static int sgx_drv_remove(struct platform_device *pdev)
 		iounmap(sgx_epc_banks[i].mem);
 #endif
 	sgx_page_cache_teardown();
-
-	for (i = 0 ; i < sgx_nr_epc_banks ; i++)
-		kfree(sgx_epc_banks[i].start);
-
-	return 0;
 }
 
-static struct platform_driver sgx_drv = {
-	.probe = sgx_drv_probe,
-	.remove = sgx_drv_remove,
-	.driver = {
-		.name			= "intel_sgx",
-		.pm			= &sgx_drv_pm,
-	},
-};
-
-static struct platform_device *pdev;
-int init_sgx_module(void)
-{
-	platform_driver_register(&sgx_drv);
-	pdev = platform_device_register_simple("intel_sgx", 0, NULL, 0);
-	if (IS_ERR(pdev))
-		pr_err("platform_device_register_simple failed\n");
-	return 0;
-}
-
-void cleanup_sgx_module(void)
-{
-	dev_set_uevent_suppress(&pdev->dev, true);
-	platform_device_unregister(pdev);
-	platform_driver_unregister(&sgx_drv);
-}
-
-module_init(init_sgx_module);
-module_exit(cleanup_sgx_module);
+module_init(sgx_init);
+module_exit(sgx_exit);
 
 MODULE_LICENSE("Dual BSD/GPL");

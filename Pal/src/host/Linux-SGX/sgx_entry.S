@@ -1,5 +1,6 @@
 #include "pal_linux_defs.h"
 #include "sgx_arch.h"
+#include "sgx_tls.h"
 
 	.extern tcs_base
 
@@ -17,11 +18,28 @@ sgx_ecall:
 	mov current_tcs@gottpoff(%rip), %rbx
 	mov %fs:(%rbx), %rbx
 
+	# simulating SGX
+	# mov $EENTER, %rax
+	# ENCLU
+
+	.byte 0xf3, 0x48, 0x0f, 0xae, 0xc0 /* RDFSBASE %RAX */
+	mov 56(%rbx), %rcx
+	mov %rax, SGX_UFSBASE(%rcx)
+
+	mov 48(%rbx), %rax
+	.byte 0xf3, 0x48, 0x0f, 0xae, 0xd0 /* WRFSBASE %RAX */
+
+	mov 56(%rbx), %rax
+	.byte 0xf3, 0x48, 0x0f, 0xae, 0xd8 /* WRGSBASE %RAX */
+
+	mov 32(%rbx), %rax
+	push %rax
+
 	# RCX has to be the AEP (Asynchronous Exit Pointer)
 	lea async_exit_pointer(%rip), %rcx
 
-	mov $EENTER, %rax
-	ENCLU
+	mov 24(%rbx), %eax
+	ret
 
 	.global async_exit_pointer
 	.type async_exit_pointer, @function

@@ -19,6 +19,7 @@ struct enclave_tls {
     void *   ustack_top;
     void *   ustack;
     void *   thread;
+    uint64_t ufsbase;
 };
 
 #ifndef DEBUG
@@ -56,6 +57,7 @@ extern uint64_t dummy_debug_variable;
 #define SGX_USTACK_TOP              0x48
 #define SGX_USTACK                  0x50
 #define SGX_THREAD                  0x58
+#define SGX_UFSBASE                 0x60
 
 #endif
 

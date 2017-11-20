@@ -123,8 +123,13 @@ enclave_entry:
 
 	# exit address in RDX, mov it to RBX
 	mov %rdx, %rbx
-	mov $EEXIT, %rax
-	ENCLU
+
+	# simulating SGX
+	# mov $EEXIT, %rax
+	# ENCLU
+	mov %gs:SGX_UFSBASE, %rax
+	.byte 0xf3, 0x48, 0x0f, 0xae, 0xd0 /* WRFSBASE %RAX */
+	jmp *%rbx
 
 #if SGX_HAS_FSGSBASE == 0
 .Lafter_resume:
@@ -193,8 +198,11 @@ enclave_entry:
 
 	# exit address in RDX, mov it to RBX
 	mov %rdx, %rbx
-	mov $EEXIT, %rax
-	ENCLU
+
+	# simulating SGX
+	# mov $EEXIT, %rax
+	# ENCLU
+	jmp *%rbx
 
 
 	.global sgx_ocall
@@ -255,8 +263,14 @@ sgx_ocall:
 
 	mov %gs:SGX_EXIT_TARGET, %rbx
 	mov %gs:SGX_AEP, %rcx
-	mov $EEXIT, %rax
-	ENCLU
+
+	# simulating SGX
+	# mov $EEXIT, %rax
+	# ENCLU
+	mov %gs:SGX_UFSBASE, %rax
+	.byte 0xf3, 0x48, 0x0f, 0xae, 0xd0 /* WRFSBASE %RAX */
+	jmp *%rbx
+
 
 .Lreturn_from_ocall:
 	# PAL convention:
@@ -353,6 +367,7 @@ sgx_getkey:
 	.cfi_endproc
 	.size sgx_getkey, .-sgx_getkey
 
+#if 0
 /*
  * rdrand:
  * Get hardware generated random value.
@@ -369,6 +384,7 @@ rdrand:
 
 	.cfi_endproc
 	.size rdrand, .-rdrand
+#endif
 
 /*
  * rdfsbase:
