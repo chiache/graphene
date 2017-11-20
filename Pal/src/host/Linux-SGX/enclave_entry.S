@@ -202,6 +202,8 @@ enclave_entry:
 	# simulating SGX
 	# mov $EEXIT, %rax
 	# ENCLU
+	mov %gs:SGX_UFSBASE, %rax
+	.byte 0xf3, 0x48, 0x0f, 0xae, 0xd0 /* WRFSBASE %RAX */
 	jmp *%rbx
 
 

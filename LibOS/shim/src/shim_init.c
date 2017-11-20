@@ -748,8 +748,8 @@ restore:
     RUN_INIT(init_async);
     RUN_INIT(init_stack, argv, envp, &argp, nauxv, &auxp);
     RUN_INIT(init_loader);
-    RUN_INIT(init_ipc_helper);
-    RUN_INIT(init_signal);
+    //RUN_INIT(init_ipc_helper);
+    //RUN_INIT(init_signal);
 
     debug("shim process initialized\n");
 
