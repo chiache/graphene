@@ -12,7 +12,7 @@
 
 int gsgx_device = -1;
 int isgx_device = -1;
-#define ISGX_FILE "/dev/isgx"
+#define ISGX_FILE "/dev/isgx-dummy"
 
 void * zero_page;
 

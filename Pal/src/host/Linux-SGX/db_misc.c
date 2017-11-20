@@ -44,6 +44,7 @@ unsigned long _DkSystemTimeQuery (void)
     return microsec;
 }
 
+#if 0
 int _DkRandomBitsRead (void * buffer, int size)
 {
     int i = 0;
@@ -73,11 +74,39 @@ int _DkRandomBitsRead (void * buffer, int size)
     }
     return i;
 }
+#endif
+
+static int random_device;
+
+int _DkRandomBitsRead (void * buffer, int size)
+{
+    if (!random_device) {
+        int fd = ocall_open("/dev/urandom", O_RDONLY, 0);
+        if (fd < 0)
+            return -PAL_ERROR_DENIED;
+
+        random_device = fd;
+    }
+
+    int total_bytes = 0;
+    do {
+        int bytes = ocall_read(random_device,
+                               buffer + total_bytes, size - total_bytes);
+        if (bytes < 0)
+            return -PAL_ERROR_DENIED;
+
+        total_bytes += bytes;
+    } while (total_bytes < size);
+
+    return total_bytes;
+}
 
 int _DkInstructionCacheFlush (const void * addr, int size)
 {
     return -PAL_ERROR_NOTIMPLEMENTED;
 }
+
+extern void * enclave_base;
 
 int _DkSegmentRegisterSet (int reg, const void * addr)
 {
@@ -85,6 +114,9 @@ int _DkSegmentRegisterSet (int reg, const void * addr)
     if (reg != PAL_SEGMENT_FS)
         return -PAL_ERROR_DENIED;
 
+    sgx_arch_tcs_t * tcs =
+        enclave_base + GET_ENCLAVE_TLS(tcs_offset);
+    tcs->ofsbasgx = (uint64_t) addr;
     SET_ENCLAVE_TLS(fsbase, (void *) addr);
     wrfsbase((uint64_t) addr);
     return 0;

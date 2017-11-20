@@ -43,6 +43,8 @@ int sgx_verify_report (sgx_arch_report_t * report);
 
 uint32_t rdrand (void);
 uint64_t rdfsbase (void);
+uint64_t rdgsbsae (void);
 void wrfsbase (uint64_t addr);
+void wrgsbase (uint64_t addr);
 
 #endif /* SGX_API_H */

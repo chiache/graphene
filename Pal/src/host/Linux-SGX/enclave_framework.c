@@ -88,6 +88,7 @@ static sgx_arch_key128_t enclave_key;
 
 int sgx_verify_report (sgx_arch_report_t * report)
 {
+#if 0
     sgx_arch_keyrequest_t keyrequest;
     memset(&keyrequest, 0, sizeof(sgx_arch_keyrequest_t));
     keyrequest.keyname = REPORT_KEY;
@@ -100,11 +101,13 @@ int sgx_verify_report (sgx_arch_report_t * report)
     }
 
     SGX_DBG(DBG_S, "Get report key for verification: %s\n", hex2str(enclave_key));
+#endif
     return 0;
 }
 
 int init_enclave_key (void)
 {
+#if 0
     sgx_arch_keyrequest_t keyrequest;
     memset(&keyrequest, 0, sizeof(sgx_arch_keyrequest_t));
     keyrequest.keyname = SEAL_KEY;
@@ -114,7 +117,8 @@ int init_enclave_key (void)
         SGX_DBG(DBG_S, "Can't get report key\n");
         return -PAL_ERROR_DENIED;
     }
-
+#endif
+    _DkRandomBitsRead(&enclave_key, sizeof(enclave_key));
     SGX_DBG(DBG_S, "Get sealing key: %s\n", hex2str(enclave_key));
     return 0;
 }
