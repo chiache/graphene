@@ -24,6 +24,8 @@ unsigned long pagesize  = PRESET_PAGESIZE;
 unsigned long pagemask  = ~(PRESET_PAGESIZE - 1);
 unsigned long pageshift = PRESET_PAGESIZE - 1;
 
+struct pal_enclave * last_enclave;
+
 static inline
 const char * alloc_concat(const char * p, int plen,
                           const char * s, int slen)
@@ -510,6 +512,8 @@ add_pages:
         SGX_DBG(DBG_E, "Cannot allocate debug info\n");
         return 0;
     }
+
+    last_enclave = enclave;
 
     dbg->pid = INLINE_SYSCALL(getpid, 0);
     dbg->base = enclave->baseaddr;

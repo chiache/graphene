@@ -92,7 +92,24 @@ sgx_raise:
 	jmp .Ldo_ecall
 
 .Lafter_resume:
-	retq
+	# RBX has to be the TCS of the thread
+	mov current_tcs@gottpoff(%rip), %rbx
+	mov %fs:(%rbx), %rbx
+
+	# decrement TCS.CSSA
+	mov 24(%rbx), %eax
+	dec %eax
+	mov %eax, 24(%rbx)
+
+	# update fs register
+	mov 48(%rbx), %rax
+	.byte 0xf3, 0x48, 0x0f, 0xae, 0xd0 /* WRFSBASE %RAX */
+
+	# update gs register
+	mov 56(%rbx), %rax
+	.byte 0xf3, 0x48, 0x0f, 0xae, 0xd8 /* WRGSBASE %RAX */
+
+	ret
 #endif
 
 sgx_entry:

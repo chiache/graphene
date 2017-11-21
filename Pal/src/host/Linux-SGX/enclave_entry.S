@@ -301,8 +301,12 @@ sgx_ocall_exit:
 	mov %rax, %gs:SGX_USTACK
 	mov %rax, %gs:SGX_USTACK_TOP
 
-	mov $EEXIT, %rax
-	ENCLU
+	# simulating SGX
+	# mov $EEXIT, %rax
+	# ENCLU
+	mov %gs:SGX_UFSBASE, %rax
+	.byte 0xf3, 0x48, 0x0f, 0xae, 0xd0 /* WRFSBASE %RAX */
+	jmp *%rbx
 
 
 .Lreturn_from_ocall:

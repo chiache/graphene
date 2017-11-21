@@ -35,6 +35,7 @@
 #include <linux/signal.h>
 #include <ucontext.h>
 #include <asm/errno.h>
+#include <assert.h>
 
 #include "sgx_enclave.h"
 
@@ -197,23 +198,78 @@ static int get_event_num (int signum)
     }
 }
 
+extern struct pal_enclave * last_enclave;
 void sgx_entry_return (void);
+
+static void __fill_ssa (int signum, struct ucontext * uc)
+{
+    sgx_arch_tcs_t * tcs = current_tcs;
+    struct enclave_tls * tls = (void *) last_enclave->baseaddr + tcs->ogsbasgx;
+
+    assert(tcs->cssa < tcs->nssa + 1);
+
+    sgx_arch_gpr_t * gpr = (sgx_arch_gpr_t *)
+        (tls->gpr + last_enclave->ssaframesize * tcs->cssa);
+    tcs->cssa++;
+
+    gpr->rax = uc->uc_mcontext.gregs[REG_RAX];
+    gpr->rbx = uc->uc_mcontext.gregs[REG_RBX];
+    gpr->rcx = uc->uc_mcontext.gregs[REG_RCX];
+    gpr->rdx = uc->uc_mcontext.gregs[REG_RDX];
+    gpr->rsp = uc->uc_mcontext.gregs[REG_RSP];
+    gpr->rbp = uc->uc_mcontext.gregs[REG_RBP];
+    gpr->rsi = uc->uc_mcontext.gregs[REG_RSI];
+    gpr->rdi = uc->uc_mcontext.gregs[REG_RDI];
+    gpr->r8  = uc->uc_mcontext.gregs[REG_R8];
+    gpr->r9  = uc->uc_mcontext.gregs[REG_R9];
+    gpr->r10 = uc->uc_mcontext.gregs[REG_R10];
+    gpr->r11 = uc->uc_mcontext.gregs[REG_R11];
+    gpr->r12 = uc->uc_mcontext.gregs[REG_R12];
+    gpr->r13 = uc->uc_mcontext.gregs[REG_R13];
+    gpr->r14 = uc->uc_mcontext.gregs[REG_R14];
+    gpr->r15 = uc->uc_mcontext.gregs[REG_R15];
+    gpr->rflags = uc->uc_mcontext.gregs[REG_EFL];
+    gpr->rip = uc->uc_mcontext.gregs[REG_RIP];
+
+    union {
+        sgx_arch_exitinfo_t info;
+        int intval;
+    } ei = { .intval = 0 };
+
+    switch(signum) {
+        case SIGBUS:
+        case SIGSEGV:
+            ei.info.vector = SGX_EXCEPTION_VECTOR_AC;
+            ei.info.valid = 1;
+            ei.info.type = 0x3;
+            break;
+        case SIGILL:
+            ei.info.vector = SGX_EXCEPTION_VECTOR_UD;
+            ei.info.valid = 1;
+            ei.info.type = 0x3;
+            break;
+        case SIGFPE:
+            ei.info.vector = SGX_EXCEPTION_VECTOR_DE;
+            ei.info.valid = 1;
+            ei.info.type = 0x3;
+            break;
+    }
+
+    gpr->exitinfo = ei.intval;
+}
 
 static void _DkTerminateSighandler (int signum, siginfo_t * info,
                                     struct ucontext * uc)
 {
     unsigned long rip = uc->uc_mcontext.gregs[REG_RIP];
 
-#if SGX_HAS_FSGSBASE == 0
-    if (rip != (unsigned long) async_exit_pointer &&
-        rip != (unsigned long) double_async_exit) {
-#else
-    if (rip != (unsigned long) async_exit_pointer) {
-#endif
+    if (!last_enclave || rip < last_enclave->baseaddr
+        || rip > last_enclave->baseaddr + last_enclave->size) {
         uc->uc_mcontext.gregs[REG_RIP] = (uint64_t) sgx_entry_return;
         uc->uc_mcontext.gregs[REG_RDI] = -PAL_ERROR_INTERRUPTED;
         uc->uc_mcontext.gregs[REG_RSI] = get_event_num(signum);
     } else {
+        __fill_ssa(signum, uc);
 #if SGX_HAS_FSGSBASE == 0
         uc->uc_mcontext.gregs[REG_R9]  = get_event_num(signum);
 #else
@@ -227,12 +283,8 @@ static void _DkResumeSighandler (int signum, siginfo_t * info,
 {
     unsigned long rip = uc->uc_mcontext.gregs[REG_RIP];
 
-#if SGX_HAS_FSGSBASE == 0
-    if (rip != (unsigned long) async_exit_pointer &&
-        rip != (unsigned long) double_async_exit) {
-#else
-    if (rip != (unsigned long) async_exit_pointer) {
-#endif
+    if (!last_enclave || rip < last_enclave->baseaddr
+        || rip > last_enclave->baseaddr + last_enclave->size) {
         switch (signum) {
             case SIGSEGV:
                 SGX_DBG(DBG_E, "Segmentation Fault in Untrusted Code (RIP = %08lx)\n", rip);
@@ -263,6 +315,8 @@ static void _DkResumeSighandler (int signum, siginfo_t * info,
             event = PAL_EVENT_ILLEGAL;
             break;
     }
+
+    __fill_ssa(signum, uc);
 #if SGX_HAS_FSGSBASE != 0
     sgx_raise(event);
 #else
