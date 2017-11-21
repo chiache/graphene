@@ -10,7 +10,9 @@
 
 #include <asm/errno.h>
 
+#if SDK_DRIVER_VERSION <= KERNEL_VERSION(1, 8, 0)
 int gsgx_device = -1;
+#endif
 int isgx_device = -1;
 #define ISGX_FILE "/dev/isgx-dummy"
 
@@ -18,9 +20,11 @@ void * zero_page;
 
 int open_gsgx(void)
 {
+#if SDK_DRIVER_VERSION <= KERNEL_VERSION(1, 8, 0)
     gsgx_device = INLINE_SYSCALL(open, 3, GSGX_FILE, O_RDWR, 0);
     if (IS_ERR(gsgx_device))
         return -ERRNO(gsgx_device);
+#endif
     isgx_device = INLINE_SYSCALL(open, 3, ISGX_FILE, O_RDWR, 0);
     if (IS_ERR(isgx_device))
         return -ERRNO(isgx_device);
@@ -101,9 +105,6 @@ static size_t get_ssaframesize (uint64_t xfrm)
 
 int check_wrfsbase_support (void)
 {
-    if (gsgx_device == -1)
-        return -EACCES;
-
     uint32_t cpuinfo[4];
     cpuid(7, 0, cpuinfo);
 
