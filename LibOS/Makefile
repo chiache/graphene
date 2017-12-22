@@ -38,39 +38,14 @@ $(GLIBC_SRC)/configure: $(GLIBC_SRC).patch
 	cd $(GLIBC_SRC) && patch -p1 < ../$(GLIBC_SRC).patch
 endif
 
-MUSL_SRC = musl-1.1.16
-MUSL_BUILD_DIR = musl-build
-.PNONY: musl
-
-musl: $(MUSL_BUILD_DIR)/Makefile
-	cd $(MUSL_BUILD_DIR) && (($(MAKE) >> build.log) 2>&1 | tee -a build.log)
-
-$(MUSL_BUILD_DIR)/Makefile: $(MUSL_SRC)/configure
-ifeq ($(DEBUG),1)
-	./buildmusl.py --quiet --debug
-else
-	./buildmusl.py --quiet
-endif
-
-$(MUSL_SRC)/configure: $(MUSL_SRC).patch
-	[ -f $(MUSL_SRC).tar.gz ] || \
-	wget https://www.musl-libc.org/releases/$(MUSL_SRC).tar.gz
-	tar -xzf $(MUSL_SRC).tar.gz
-	cd $(MUSL_SRC) && patch -p1 < ../$(MUSL_SRC).patch
-
-.PHONY: pack
-pack: $(GLIBC_TARGET)
-	@../Scripts/pack_binaries.sh glibc $^
-	$(MAKE) -C $(SHIM_DIR) pack
-
 .PHONY: clean
 clean:
 	$(MAKE) -C $(SHIM_DIR) clean
 	rm -rf $(BUILD_DIR)
 
 else
-$(GLIBC_TARGET): .packed/glibc.tar.gz
-	tar -xmozf $< $@
+.IGNORE: $(GLIBC_TARGET)
+$(GLIBC_TARGET):
 
 .PHONY: clean
 clean:
