@@ -309,8 +309,24 @@ void _DkExceptionReturn (void * event)
 
     if (!ctx) {
         struct pal_frame * frame = e->frame;
+        int err = 0;
+
         if (!frame)
             return;
+
+        switch (e->event_num) {
+            case PAL_EVENT_MEMFAULT:
+                err = PAL_ERROR_BADADDR;
+                break;
+            case PAL_EVENT_QUIT:
+            case PAL_EVENT_SUSPEND:
+            case PAL_EVENT_RESUME:
+                err = PAL_ERROR_INTERRUPTED;
+                break;
+        }
+
+        if (err)
+            _DkRaiseFailure(err);
 
         __clear_frame(frame);
         arch_restore_frame(&frame->arch);
