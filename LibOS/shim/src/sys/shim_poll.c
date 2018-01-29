@@ -418,8 +418,15 @@ int shim_do_poll (struct pollfd * fds, nfds_t nfds, int timeout)
             fds[i].revents |= (fds[i].events & (POLLIN|POLLRDNORM));
         if (polls[i].flags & RET_W)
             fds[i].revents |= (fds[i].events & (POLLOUT|POLLWRNORM));
+
+        /*
+         * Tsai 1/29/18: revents returns POLLERR or POLLHUP whenever
+         * an error occur to the file descriptor. DkObjectsWaitAny()
+         * cannot differentiate POLLERR from POLLHUP, so we return both
+         * values to the application.
+         */
         if (polls[i].flags & RET_E)
-            fds[i].revents |= (fds[i].events & (POLLERR|POLLHUP));
+            fds[i].revents |= POLLERR|POLLHUP;
 
         if (fds[i].revents)
             ret++;
@@ -466,8 +473,9 @@ int shim_do_ppoll (struct pollfd * fds, int nfds, struct timespec * tsp,
             fds[i].revents |= (fds[i].events & (POLLIN|POLLRDNORM));
         if (polls[i].flags & RET_W)
             fds[i].revents |= (fds[i].events & (POLLOUT|POLLWRNORM));
+        /* Same logic as above (in shim_do_poll) */
         if (polls[i].flags & RET_E)
-            fds[i].revents |= (fds[i].events & (POLLERR|POLLHUP));
+            fds[i].revents |= POLLERR|POLLHUP;
 
         if (fds[i].revents)
             ret++;
