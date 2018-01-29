@@ -1,0 +1,42 @@
+#!$(PAL)
+
+loader.preload = file:$(SHIMPATH)
+loader.exec = file:$(RUSTDIR)/bin/rustc
+loader.execname = /rust/rustc
+loader.env.LD_LIBRARY_PATH = /rust/lib:/lib:/lib/x86_64-linux-gnu:/usr/lib:/usr/lib/x86_64-linux-gnu
+loader.env.PATH = /rust/bin:/bin:/usr/bin
+loader.env.RUST_HOME = /rust
+loader.env.RUSTUP_TOOLCHAIN = /rust/toolchains/$(RUSTTARGET)
+loader.debug_type = $(DEBUGTYPE)
+
+fs.mount.lib1.type = chroot
+fs.mount.lib1.path = /lib
+fs.mount.lib1.uri = file:$(LIBCDIR)
+
+fs.mount.lib2.type = chroot
+fs.mount.lib2.path = /lib/x86_64-linux-gnu
+fs.mount.lib2.uri = file:/lib/x86_64-linux-gnu
+
+fs.mount.usr.type = chroot
+fs.mount.usr.path = /usr
+fs.mount.usr.uri = file:/usr
+
+fs.mount.tmp.type = chroot
+fs.mount.tmp.path = /tmp
+fs.mount.tmp.uri = file:/tmp
+
+fs.mount.rust.type = chroot
+fs.mount.rust.path = /rust
+fs.mount.rust.uri = file:$(RUSTDIR)
+
+sgx.enclave_size = 1G
+sgx.thread_num = 16
+
+sgx.search_trusted_libs = file:$(LIBCDIR),file:$(RUSTDIR)/lib,file:/lib/x86_64-linux-gnu
+
+sgx.trusted_files.cc = file:/usr/bin/cc
+
+sgx.allowed_files.rlib = file:$(RUSTDIR)/lib/rustlib
+sgx.allowed_files.test_files = file:test_files
+
+sgx.trusted_children.cc = file:cc.sig
