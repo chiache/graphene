@@ -3,7 +3,7 @@ rust_home = build
 
 test_files = test_files
 
-exec_target = $(addsuffix .manifest,as ld cc1 collect2 cc rustc)
+exec_target = $(addsuffix .manifest,ld collect2 cc rustc)
 
 clean-extra = clean-garbages
 
