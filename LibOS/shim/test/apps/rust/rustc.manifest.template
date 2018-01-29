@@ -2,11 +2,11 @@
 
 loader.preload = file:$(SHIMPATH)
 loader.exec = file:$(RUSTDIR)/bin/rustc
-loader.execname = /rust/rustc
+loader.execname = /rust/bin/rustc
 loader.env.LD_LIBRARY_PATH = /rust/lib:/lib:/lib/x86_64-linux-gnu:/usr/lib:/usr/lib/x86_64-linux-gnu
 loader.env.PATH = /rust/bin:/bin:/usr/bin
 loader.env.RUST_HOME = /rust
-loader.env.RUSTUP_TOOLCHAIN = /rust/toolchains/$(RUSTTARGET)
+loader.env.CARGO_HOME = /
 loader.debug_type = $(DEBUGTYPE)
 
 fs.mount.lib1.type = chroot

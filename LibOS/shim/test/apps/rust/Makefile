@@ -11,7 +11,7 @@ huge_rule = sys.stack.size = 64M\nsys.brk.size = 256M\nglibc.heap_size = 16M\nsg
 
 extra_rules = \
 	-e 's:\$$(DEBUGTYPE):$(if $(DEBUG),inline,none):g' \
-	-e 's:\$$(RUSTDIR):$(rust_home):g' \
+	-e 's:\$$(RUSTDIR):$(rust_home)/toolchains/$(rust_target):g' \
 	-e 's:\$$(RUSTTARGET):$(rust_target):g' \
 	-e 's:\$$(GCCDIR):$(patsubst %/cc1,%,$(shell gcc -print-file-name=cc1)):g' \
 	-e 's:\$$(HUGERULE):$(if $(HUGE),$(huge_rule),):g'
