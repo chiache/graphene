@@ -201,10 +201,13 @@ index 56e1934..0547829 100644
  
  #define pthread __pthread
  
-@@ -17,6 +18,8 @@ struct pthread {
+@@ -17,6 +18,11 @@ struct pthread {
  	void **dtv, *unused1, *unused2;
  	uintptr_t sysinfo;
  	uintptr_t canary, canary2;
++	/* Compatible with glibc */
++	unsigned long int vgetcpu_cache[2];
++	int __glibc_reserved1;
 +	/* For graphene, we reserve shim tcb in the libc tcb */
 +	shim_tcb_t shim_tcb;
  	pid_t tid, pid;
