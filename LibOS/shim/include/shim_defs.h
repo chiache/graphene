@@ -13,6 +13,20 @@
 #define DEFAULT_BRK_MAX_SIZE        (256 * 1024)        /* 256KB */
 #define DEFAULT_SYS_STACK_SIZE      (256 * 1024)        /* 256KB */
 
+/*
+ * Default size on stack reserved for auxilary vectors:
+ * (1) AT_PHDR (2) AT_PHNUM (3) AT_PHENT (4) AT_PAGESZ (5) AT_ENTRY (6) AT_BASE
+ * (7) AT_RANDOM (8) AT_NULL (9) reserved
+ */
+#define DEFAULT_AUXV_NUM        (9)
+
+/* By default, AT_RANDOM_SIZE is 16, unless specified otherwise. */
+#define AUXV_RANDOM_SIZE        (16)
+
+/* Default reserved size on application stack */
+#define DEFAULT_STACK_RESERVE_SIZE  \
+    (sizeof(elf_auxv_t) * DEFAULT_AUXV_NUM + AUXV_RANDOM_SIZE)
+
 #define CP_INIT_VMA_SIZE            (64 * 1024 * 1024)  /* 64MB */
 
 #define EXECVE_RTLD                 1

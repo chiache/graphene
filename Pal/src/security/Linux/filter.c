@@ -7,8 +7,10 @@ typedef __builtin_va_list __gnuc_va_list;
 #include "bpf-helper.h"
 #include "internal.h"
 #include "graphene-ipc.h"
-#include "graphene.h"
+#include "graphene-rm.h"
+#include "graphene-sandbox.h"
 
+#include <linux/audit.h>
 #include <linux/types.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
@@ -21,6 +23,21 @@ typedef __builtin_va_list __gnuc_va_list;
 #include <asm/mman.h>
 #include <asm/ioctls.h>
 
+#define arch_nr (offsetof(struct seccomp_data, arch))
+
+#if defined(__i386__)
+# define ARCH_NR AUDIT_ARCH_I386
+#elif defined(__x86_64__)
+# define ARCH_NR AUDIT_ARCH_X86_64
+#else
+# error "Unsupported architecture"
+#endif
+
+#define VALIDATE_ARCHITECTURE \
+    BPF_STMT(BPF_LD+BPF_W+BPF_ABS, arch_nr), \
+    BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, ARCH_NR, 1, 0), \
+    BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_KILL),
+
 #ifndef PR_SET_NO_NEW_PRIVS
 # define PR_SET_NO_NEW_PRIVS 38
 #endif
@@ -32,15 +49,11 @@ typedef __builtin_va_list __gnuc_va_list;
 #define SYSCALL_FILTERS                                  \
     LOAD_SYSCALL_NR,                                     \
                                                          \
-    SYSCALL(__NR_open,          ALLOW),                  \
     SYSCALL(__NR_fstat,         ALLOW),                  \
     SYSCALL(__NR_accept4,       ALLOW),                  \
-    SYSCALL(__NR_bind,          ALLOW),                  \
-    SYSCALL(__NR_clone,         ALLOW),                  \
+    SYSCALL(__NR_clone,         JUMP(&labels, clone)),   \
     SYSCALL(__NR_close,         ALLOW),                  \
     SYSCALL(__NR_dup2,          ALLOW),                  \
-    SYSCALL(__NR_connect,       ALLOW),                  \
-    SYSCALL(__NR_execve,        ALLOW),                  \
     SYSCALL(__NR_exit,          ALLOW),                  \
     SYSCALL(__NR_exit_group,    ALLOW),                  \
     SYSCALL(__NR_fchmod,        ALLOW),                  \
@@ -55,7 +68,7 @@ typedef __builtin_va_list __gnuc_va_list;
     SYSCALL(__NR_listen,        ALLOW),                  \
     SYSCALL(__NR_lseek,         ALLOW),                  \
     SYSCALL(__NR_mkdir,         ALLOW),                  \
-    SYSCALL(__NR_mmap,          JUMP(&labels, mmap)),    \
+    SYSCALL(__NR_mmap,          ALLOW),                  \
     SYSCALL(__NR_mprotect,      ALLOW),                  \
     SYSCALL(__NR_munmap,        ALLOW),                  \
     SYSCALL(__NR_nanosleep,     ALLOW),                  \
@@ -70,12 +83,10 @@ typedef __builtin_va_list __gnuc_va_list;
     SYSCALL(__NR_sendmsg,       ALLOW),                  \
     SYSCALL(__NR_setsockopt,    ALLOW),                  \
     SYSCALL(__NR_shutdown,      ALLOW),                  \
-    SYSCALL(__NR_socket,        ALLOW),                  \
-    SYSCALL(__NR_socketpair,    ALLOW),                  \
-    SYSCALL(__NR_stat,          ALLOW),                  \
+    SYSCALL(__NR_socket,        JUMP(&labels, socket)),  \
+    SYSCALL(__NR_socketpair,    JUMP(&labels, socket)),  \
     SYSCALL(__NR_tgkill,        ALLOW),                  \
     SYSCALL(__NR_unlink,        ALLOW),                  \
-    SYSCALL(__NR_vfork,         ALLOW),                  \
     SYSCALL(__NR_wait4,         ALLOW),                  \
     SYSCALL(__NR_write,         ALLOW),                  \
                                                          \
@@ -86,51 +97,62 @@ typedef __builtin_va_list __gnuc_va_list;
     SYSCALL(__NR_arch_prctl,        ALLOW),              \
     SYSCALL(__NR_rt_sigaction,      ALLOW),              \
     SYSCALL(__NR_rt_sigprocmask,    ALLOW),              \
-    SYSCALL(__NR_rt_sigreturn,      ALLOW)
+    SYSCALL(__NR_rt_sigreturn,      ALLOW),
 #else
 # error "Unsupported architecture"
 #endif
+
+#define SYSCALL_UNSAFE_FILTERS                           \
+    SYSCALL(__NR_open,          ALLOW),                  \
+    SYSCALL(__NR_stat,          ALLOW),                  \
+    SYSCALL(__NR_bind,          ALLOW),                  \
+    SYSCALL(__NR_connect,       ALLOW),                  \
+    SYSCALL(__NR_execve,        ALLOW),
 
 #ifndef SIGCHLD
 # define SIGCHLD 17
 #endif
 
+#define CLONE_ALLOWED_FLAGS                              \
+    (CLONE_FILES|CLONE_FS|CLONE_IO|CLONE_THREAD|         \
+     CLONE_SIGHAND|CLONE_PTRACE|CLONE_SYSVSEM|CLONE_VM|  \
+     CLONE_VFORK|CLONE_PARENT_SETTID|SIGCHLD)
+
 #define SYSCALL_ACTIONS                                  \
-    DENY,                                                \
+    TRAP,                                                \
                                                          \
     LABEL(&labels, ioctl),                               \
     ARG(1),                                              \
+    JEQ(GRM_SYS_OPEN,   ALLOW),                          \
+    JEQ(GRM_SYS_STAT,   ALLOW),                          \
+    JEQ(GRM_SYS_BIND,   ALLOW),                          \
+    JEQ(GRM_SYS_CONNECT,ALLOW),                          \
+    JEQ(GRM_SYS_EXECVE, ALLOW),                          \
     JEQ(FIONREAD,       ALLOW),                          \
     JEQ(GIPC_CREATE,    ALLOW),                          \
     JEQ(GIPC_JOIN,      ALLOW),                          \
     JEQ(GIPC_RECV,      ALLOW),                          \
     JEQ(GIPC_SEND,      ALLOW),                          \
-    JEQ(GRAPHENE_SET_TASK,  ALLOW),                      \
-    DENY,                                                \
+    JEQ(GRM_SET_SANDBOX,ALLOW),                          \
+    TRAP,                                                \
                                                          \
     LABEL(&labels, fcntl),                               \
     ARG(1),                                              \
     JEQ(F_SETFD,   ALLOW),                               \
     JEQ(F_SETFL,   ALLOW),                               \
-    DENY,                                                \
-                                                         \
-    LABEL(&labels, mmap),                                \
-    ARG_FLAG(3, MAP_HUGETLB),                            \
-    JEQ(0, ALLOW),                                       \
-    DENY,                                                \
+    TRAP,                                                \
                                                          \
     LABEL(&labels, clone),                               \
-    ARG_FLAG(2, (CLONE_IO|CLONE_VM|CLONE_VFORK)),        \
+    ARG_FLAG(0, CLONE_ALLOWED_FLAGS),                    \
     JEQ(0, ALLOW),                                       \
-    JEQ(SIGCHLD, ALLOW),                                 \
-    DENY,                                                \
+    TRAP,                                                \
                                                          \
     LABEL(&labels, socket),                              \
     ARG(0),                                              \
     JEQ(AF_UNIX,    ALLOW),                              \
     JEQ(AF_INET,    ALLOW),                              \
     JEQ(AF_INET6,   ALLOW),                              \
-    DENY
+    TRAP,
 
 
 /* VERY IMPORTANT: This is the filter that gets applied to the startup code
@@ -141,13 +163,14 @@ typedef __builtin_va_list __gnuc_va_list;
  * as well.
  */
 
-int install_initial_syscall_filter (void)
+int install_initial_syscall_filter (int has_reference_monitor)
 {
     int err = 0;
     struct bpf_labels labels = { .count = 0 };
 
     struct sock_filter filter[] = {
-        SYSCALL_FILTERS,
+        VALIDATE_ARCHITECTURE
+        SYSCALL_FILTERS
 
 #if USE_CLOCK_GETTIME == 1
         SYSCALL(__NR_clock_gettime, ALLOW),
@@ -156,12 +179,29 @@ int install_initial_syscall_filter (void)
 #endif
         SYSCALL(__NR_prctl,     JUMP(&labels, prctl)),
 
-        SYSCALL_ACTIONS,
-
+        SYSCALL_ACTIONS
         LABEL(&labels, prctl),
         ARG(0),
         JEQ(PR_SET_SECCOMP,     ALLOW),
-        DENY,
+        TRAP,
+    };
+
+    struct sock_filter filter_unsafe[] = {
+        SYSCALL_FILTERS
+        SYSCALL_UNSAFE_FILTERS
+
+#if USE_CLOCK_GETTIME == 1
+        SYSCALL(__NR_clock_gettime, ALLOW),
+#else
+        SYSCALL(__NR_gettimeofday,  ALLOW),
+#endif
+        SYSCALL(__NR_prctl,     JUMP(&labels, prctl)),
+
+        SYSCALL_ACTIONS
+        LABEL(&labels, prctl),
+        ARG(0),
+        JEQ(PR_SET_SECCOMP,     ALLOW),
+        TRAP,
     };
 
     struct sock_fprog prog = {
@@ -169,7 +209,25 @@ int install_initial_syscall_filter (void)
         .filter = filter,
     };
 
-    bpf_resolve_jumps(&labels, filter, prog.len);
+    if (!has_reference_monitor) {
+        prog.len = (unsigned short)
+            (sizeof(filter_unsafe) / sizeof(filter_unsafe[0]));
+        prog.filter = filter_unsafe;
+    }
+
+    bpf_resolve_jumps(&labels, prog.filter, prog.len);
+
+    char buffer[2] = "\0\0";
+    char proc_jit_enable[] = "/proc/sys/net/core/bpf_jit_enable";
+
+    int fd = sys_open(proc_jit_enable, O_RDONLY, 0);
+    if (!IS_ERR(fd)) {
+        err = INLINE_SYSCALL(read, 3, fd, &buffer, 2);
+        if (IS_ERR(err) || buffer[0] == '0')
+            printf("Set \"%s\" to 1 for better performance.\n",
+                   proc_jit_enable);
+        INLINE_SYSCALL(close, 1, fd);
+    }
 
     err = INLINE_SYSCALL(prctl, 5, PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
     if (IS_ERR(err))
@@ -186,19 +244,21 @@ failed:
     return -ERRNO(err);
 }
 
-int install_syscall_filter (void * code_start, void * code_end)
+int install_syscall_filter (void * pal_code_start, void * pal_code_end)
 {
     int err = 0;
     struct bpf_labels labels = { .count = 0 };
 
-    printf("set up filter in %p-%p\n", code_start, code_end);
-
     struct sock_filter filter[] = {
-        IP,
-        JLT((unsigned long) code_start, DENY),
-        JGT((unsigned long) code_end,   DENY),
+        LOAD_SYSCALL_NR,
+        SYSCALL(__NR_prctl,     TRAP),
 
-        SYSCALL(__NR_prctl,     DENY),
+        IP,
+        JLT((uint64_t) TEXT_START,         TRAP),
+        JLT((uint64_t) TEXT_END,           ALLOW),
+        JLT((uint64_t) pal_code_start,     TRAP),
+        JGT((uint64_t) pal_code_end,       TRAP),
+
         ALLOW,
     };
 

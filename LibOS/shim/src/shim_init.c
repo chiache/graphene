@@ -153,7 +153,7 @@ long int glibc_option (const char * opt)
 {
     char cfg[CONFIG_MAX];
 
-    if (strcmp_static(opt, "heap_size")) {
+    if (strequal_static(opt, "heap_size")) {
         ssize_t ret = get_config(root_config, "glibc.heap_size", cfg, CONFIG_MAX);
         if (ret <= 0) {
             debug("no glibc option: %s (err=%d)\n", opt, ret);
@@ -258,27 +258,38 @@ void * allocate_stack (size_t size, size_t protect_size, bool user)
     else
         stack = system_malloc(size + protect_size);
 
-    if (!stack)
+    if (!stack) {
+        debug("system_malloc() returns NULL\n");
         return NULL;
+    }
 
     ADD_PROFILE_OCCURENCE(alloc_stack, size + protect_size);
     INC_PROFILE_OCCURENCE(alloc_stack_count);
 
     if (protect_size &&
-        !DkVirtualMemoryProtect(stack, protect_size, PAL_PROT_NONE))
+        !DkVirtualMemoryProtect(stack, protect_size, PAL_PROT_NONE)) {
+        debug("can't protect memory %p-%p\n", stack, stack + protect_size);
         return NULL;
+    }
 
     stack += protect_size;
 
     if (user) {
-        if (bkeep_mmap(stack, size, PROT_READ|PROT_WRITE,
-                       STACK_FLAGS, NULL, 0, "stack") < 0)
+        int ret = bkeep_mmap(stack, size, PROT_READ|PROT_WRITE,
+                             STACK_FLAGS, NULL, 0, "stack");
+        if (ret < 0) {
+            debug("bkeep_mmap failed (err = %d)\n", ret);
             return NULL;
+        }
 
-        if (protect_size &&
-            bkeep_mmap(stack - protect_size, protect_size, 0,
-                       STACK_FLAGS, NULL, 0, NULL) < 0)
-            return NULL;
+        if (protect_size) {
+            ret = bkeep_mmap(stack - protect_size, protect_size, 0,
+                             STACK_FLAGS, NULL, 0, NULL);
+            if (ret < 0) {
+                debug("bkeep_mmap failed (err = %d)\n", ret);
+                return NULL;
+            }
+        }
     }
 
     debug("allocated stack at %p (size = %d)\n", stack, size);
@@ -286,8 +297,8 @@ void * allocate_stack (size_t size, size_t protect_size, bool user)
 }
 
 int populate_user_stack (void * stack, size_t stack_size,
-                         int nauxv, elf_auxv_t ** auxpp,
-                         const char *** argvp, const char *** envpp)
+                         const char *** argvp, const char *** envpp,
+                         size_t reserve_size, void ** reserved)
 {
     const char ** argv = *argvp, ** envp = *envpp;
     const char ** new_argv = NULL, ** new_envp = NULL;
@@ -332,11 +343,11 @@ copy_envp:
     stack_bottom = (void *) ((unsigned long) stack_bottom & ~7UL);
     *((unsigned long *) ALLOCATE_TOP(sizeof(unsigned long))) = 0;
 
-    if (nauxv) {
-        elf_auxv_t * old_auxp = *auxpp;
-        *auxpp = ALLOCATE_TOP(sizeof(elf_auxv_t) * nauxv);
-        if (old_auxp)
-            memcpy(*auxpp, old_auxp, nauxv * sizeof(elf_auxv_t));
+    if (reserve_size) {
+        debug("reserve %d bytes on top of stack\n", reserve_size);
+        *reserved = (void *) ALLOCATE_TOP(reserve_size);
+    } else {
+        *reserved = stack_top;
     }
 
     memmove(stack_top - (stack_bottom - stack), stack, stack_bottom - stack);
@@ -350,7 +361,7 @@ copy_envp:
 unsigned long sys_stack_size = 0;
 
 int init_stack (const char ** argv, const char ** envp, const char *** argpp,
-                int nauxv, elf_auxv_t ** auxpp)
+                int * nauxvp, elf_auxv_t ** auxpp, void ** stack_top)
 {
     if (!sys_stack_size) {
         sys_stack_size = DEFAULT_SYS_STACK_SIZE;
@@ -374,11 +385,18 @@ int init_stack (const char ** argv, const char ** envp, const char *** argpp,
     if (initial_envp)
         envp = initial_envp;
 
+    void *reserved_on_stack = NULL;
     int ret = populate_user_stack(stack, sys_stack_size,
-                                  nauxv, auxpp, &argv, &envp);
+                                  &argv, &envp, DEFAULT_STACK_RESERVE_SIZE,
+                                  &reserved_on_stack);
     if (ret < 0)
         return ret;
 
+    /* populate new auxiliary vectors on the stack, do not pass
+     * through the host auxiliary vectors */
+    *nauxvp = DEFAULT_AUXV_NUM;
+    *auxpp = reserved_on_stack;
+    *stack_top = reserved_on_stack + DEFAULT_STACK_RESERVE_SIZE;
     *argpp = argv;
     initial_envp = envp;
 
@@ -394,7 +412,7 @@ int read_environs (const char ** envp)
     for (const char ** e = envp ; *e ; e++) {
         switch ((*e)[0]) {
             case 'L': {
-                if (strpartcmp_static(*e, "LD_LIBRARY_PATH=")) {
+                if (strstartswith_static(*e, "LD_LIBRARY_PATH=")) {
                     const char * s = *e + static_strlen("LD_LIBRARY_PATH=");
                     int npaths = 0;
                     for (const char * tmp = s ; *tmp ; tmp++)
@@ -526,7 +544,7 @@ static void set_profile_enabled (const char ** envp)
 {
     const char ** p;
     for (p = envp ; (*p) ; p++)
-        if (strpartcmp_static(*p, "PROFILE_ENABLED="))
+        if (strstartswith_static(*p, "PROFILE_ENABLED="))
             break;
     if (!(*p))
         return;
@@ -706,7 +724,7 @@ int shim_init (int argc, void * args, void ** return_stack)
     debug("shim loaded at %p, ready to initialize\n", &__load_address);
 
     if (argc && argv[0][0] == '-') {
-        if (strcmp_static(argv[0], "-resume") && argc >= 2) {
+        if (strequal_static(argv[0], "-resume") && argc >= 2) {
             const char * filename = *(argv + 1);
             argc -= 2;
             argv += 2;
@@ -746,7 +764,8 @@ restore:
     RUN_INIT(init_mount);
     RUN_INIT(init_important_handles);
     RUN_INIT(init_async);
-    RUN_INIT(init_stack, argv, envp, &argp, nauxv, &auxp);
+    void * stack_top = NULL;
+    RUN_INIT(init_stack, argv, envp, &argp, &nauxv, &auxp, &stack_top);
     RUN_INIT(init_loader);
     RUN_INIT(init_ipc_helper);
     RUN_INIT(init_signal);
@@ -785,7 +804,7 @@ restore:
 
     if (cur_thread->exec)
         execute_elf_object(cur_thread->exec,
-                           argc, argp, nauxv, auxp);
+                           argc, argp, nauxv, auxp, stack_top);
 
     *return_stack = initial_stack;
     return 0;
@@ -922,7 +941,7 @@ static int open_pal_handle (const char * uri, void * obj)
 {
     PAL_HANDLE hdl;
 
-    if (strpartcmp_static(uri, "dev:"))
+    if (strstartswith_static(uri, "dev:"))
         hdl = DkStreamOpen(uri, 0,
                            PAL_SHARE_OWNER_X|PAL_SHARE_OWNER_W|
                            PAL_SHARE_OWNER_R,

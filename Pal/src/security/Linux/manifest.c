@@ -18,7 +18,8 @@
 # include "internal.h"
 #endif
 
-#include "graphene.h"
+#include "graphene-sandbox.h"
+#include "graphene-ipc.h"
 #include "pal_security.h"
 #include "api.h"
 
@@ -30,7 +31,7 @@
 
 static inline int is_file_uri (const char * uri)
 {
-    return strpartcmp_static(uri, "file:");
+    return strstartswith_static(uri, "file:");
 }
 
 static inline const char * file_uri_to_path (const char * uri, int len)
@@ -128,13 +129,13 @@ int get_fs_paths (struct config_store * config, const char *** paths)
     char key[CONFIG_MAX], * k = keys, * n;
     char * tmp;
 
-    tmp = strcpy_static(key, "fs.mount.", CONFIG_MAX);
+    tmp = stpncpy_static(key, "fs.mount.", CONFIG_MAX);
 
     for (int i = 0 ; i < nkeys ; i++) {
         for (n = k ; *n ; n++);
         int len = n - k;
         memcpy(tmp, k, len);
-        strcpy_static(tmp + len, ".uri", (key + CONFIG_MAX) - (tmp + len));
+        stpncpy_static(tmp + len, ".uri", (key + CONFIG_MAX) - (tmp + len));
 
         const char * path = __get_path(config, key);
         if (path)
@@ -186,13 +187,13 @@ int get_net_rules (struct config_store * config,
                 continue;
             k = binds;
             nadded = nbinds;
-            tmp = strcpy_static(key, "net.allow_bind.", CONFIG_MAX);
+            tmp = stpncpy_static(key, "net.allow_bind.", CONFIG_MAX);
         } else {
             if (!npeers)
                 continue;
             k = peers;
             nadded = npeers;
-            tmp = strcpy_static(key, "net.allow_peer.", CONFIG_MAX);
+            tmp = stpncpy_static(key, "net.allow_peer.", CONFIG_MAX);
         }
 
         for (int i = 0 ; i < nadded ; i++) {
@@ -269,7 +270,7 @@ next:
     return nrules;
 }
 
-int ioctl_set_graphene (struct config_store * config, int ndefault,
+int ioctl_set_graphene (int device, struct config_store * config, int ndefault,
                         const struct graphene_user_policy * default_policies)
 {
     int ro = GRAPHENE_FS_READ, rw = ro | GRAPHENE_FS_WRITE;
@@ -299,10 +300,11 @@ int ioctl_set_graphene (struct config_store * config, int ndefault,
         goto out;
     }
 
+    /* remember add 2 for PAL_LOADER and /dev/gipc */
     struct graphene_policies * p =
                 __alloca(sizeof(struct graphene_policies) +
                          sizeof(struct graphene_user_policy) *
-                         (ndefault + npreload + nfs + net));
+                         (ndefault + npreload + nfs + net + 2));
 
     memcpy(&p->policies[n], default_policies,
            sizeof(struct graphene_user_policy) * ndefault);
@@ -328,15 +330,17 @@ int ioctl_set_graphene (struct config_store * config, int ndefault,
         n++;
     }
 
+    p->policies[n].type = GRAPHENE_FS_PATH | ro;
+    p->policies[n].value = "/dev/gipc";
+    n++;
+
+    p->policies[n].type = GRAPHENE_FS_PATH | ro;
+    p->policies[n].value = PAL_LOADER;
+    n++;
+
     p->npolicies = n;
 
-    fd = INLINE_SYSCALL(open, 3, GRAPHENE_FILE, O_RDONLY, 0);
-    if (IS_ERR(fd)) {
-        ret = -ERRNO(fd);
-        goto out;
-    }
-
-    ret = INLINE_SYSCALL(ioctl, 3, fd, GRAPHENE_SET_TASK, p);
+    ret = INLINE_SYSCALL(ioctl, 3, device, GRM_SET_SANDBOX, p);
     ret = IS_ERR(ret) ? -ERRNO(ret) : 0;
 
 out:

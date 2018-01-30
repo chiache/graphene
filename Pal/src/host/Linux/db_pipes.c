@@ -33,7 +33,7 @@
 #include "pal_security.h"
 #include "pal_debug.h"
 #include "api.h"
-#include "graphene.h"
+#include "graphene-sandbox.h"
 
 #include <linux/types.h>
 typedef __kernel_pid_t pid_t;
@@ -47,16 +47,32 @@ typedef __kernel_pid_t pid_t;
 # include <linux/msg.h>
 #endif
 
-static int pipe_path (int pipeid, char * path, int len)
+static ssize_t pipe_path (int pipeid, char * path, size_t len)
 {
+    char * tmp = path;
+    int ret = 0;
+
     /* use abstract UNIX sockets for pipes */
     memset(path, 0, len);
 
-    if (pal_sec.pipe_prefix_id)
-        return snprintf(path + 1, len - 1, GRAPHENE_UNIX_PREFIX_FMT "/%08x",
-                        pal_sec.pipe_prefix_id, pipeid);
-    else
-        return snprintf(path + 1, len - 1, "/graphene/%08x", pipeid);
+    if (pal_sec.pipe_prefix[1]) {
+        if (GRAPHENE_UNIX_PREFIX_SIZE < len) {
+            memcpy(path, pal_sec.pipe_prefix, GRAPHENE_UNIX_PREFIX_SIZE);
+            tmp = path + GRAPHENE_UNIX_PREFIX_SIZE;
+        } else {
+            tmp = NULL;
+        }
+    } else {
+        tmp = stpncpy_static(path, "@/graphene/00000000/", len);
+    }
+
+    if (!tmp)
+        return -PAL_ERROR_TOOLONG;
+
+    path[0] = '\0';
+    ret = snprintf(tmp, path + len - tmp, "%08x", pipeid);
+
+    return ret < 0 ? ret : tmp + ret - path;
 }
 
 static int pipe_addr (int pipeid, struct sockaddr_un * addr)
@@ -79,7 +95,7 @@ static int pipe_listen (PAL_HANDLE * handle, PAL_NUM pipeid, int options)
     if ((ret = pipe_addr(pipeid, &addr)) < 0)
         return ret;
 
-    ret = INLINE_SYSCALL(bind, 3, fd, &addr, sizeof(addr.sun_path) - 1);
+    ret = sys_bind(fd, (struct sockaddr *) &addr, sizeof(addr.sun_path) - 1);
 
     if (IS_ERR(ret)) {
         INLINE_SYSCALL(close, 1, fd);
@@ -194,7 +210,7 @@ static int pipe_connect (PAL_HANDLE * handle, PAL_NUM pipeid, int options)
     if ((ret = pipe_addr(pipeid, &addr)) < 0)
         return ret;
 
-    ret = INLINE_SYSCALL(connect, 3, fd, &addr, sizeof(addr.sun_path) - 1);
+    ret = sys_connect(fd, (struct sockaddr *) &addr, sizeof(addr.sun_path) - 1);
 
     if (IS_ERR(ret)) {
         INLINE_SYSCALL(close, 1, fd);
@@ -302,7 +318,7 @@ static int pipe_open (PAL_HANDLE *handle, const char * type, const char * uri,
 {
     options &= PAL_OPTION_MASK;
 
-    if (strpartcmp_static(type, "pipe:") && !*uri)
+    if (strstartswith_static(type, "pipe:") && !*uri)
         return pipe_private(handle, options);
 
     char * endptr;
@@ -311,10 +327,10 @@ static int pipe_open (PAL_HANDLE *handle, const char * type, const char * uri,
     if (*endptr)
         return -PAL_ERROR_INVAL;
 
-    if (strpartcmp_static(type, "pipe.srv:"))
+    if (strstartswith_static(type, "pipe.srv:"))
         return pipe_listen(handle, pipeid, options);
 
-    if (strpartcmp_static(type, "pipe:"))
+    if (strstartswith_static(type, "pipe:"))
         return pipe_connect(handle, pipeid, options);
 
     return -PAL_ERROR_INVAL;

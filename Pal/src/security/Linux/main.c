@@ -21,7 +21,10 @@
 
 #include "pal_security.h"
 #include "internal.h"
-#include "graphene.h"
+#include "graphene-sandbox.h"
+
+#undef PAL_LOADER
+#define PAL_LOADER XSTRINGIFY(RUNTIME_DIR) "/" "libpal-Linux.so"
 
 #define PRESET_PAGESIZE  (4096UL)
 
@@ -29,10 +32,12 @@ unsigned long pagesize  = PRESET_PAGESIZE;
 unsigned long pageshift = PRESET_PAGESIZE - 1;
 unsigned long pagemask  = ~(PRESET_PAGESIZE - 1);
 
-# define POOL_SIZE 4096 * 64
-static char mem_pool[POOL_SIZE];
-static char *bump = mem_pool;
-static char *mem_pool_end = &mem_pool[POOL_SIZE];
+/* Chia-Che: setting the minimal pool size to 1 page.
+   The end of the data segment shouldn't exceed 0x10000 boundary */
+#define MIN_POOL_SIZE   PRESET_PAGESIZE
+char mem_pool[MIN_POOL_SIZE] __attribute__((section(".pool")));
+static char *bump = &__pool_start;
+static char *mem_pool_end = &__pool_end;
 
 void * malloc (size_t size)
 {
@@ -40,7 +45,7 @@ void * malloc (size_t size)
 
     bump += size;
     if (bump >= mem_pool_end) {
-        printf("Pal reference monitor out of internal memory!\n");
+        printf("Pal security loader: out of memory\n");
         INLINE_SYSCALL(exit_group, 1, -1);
         return NULL;
     }
@@ -59,15 +64,15 @@ void free (void * mem)
 # define FILEBUF_SIZE 832
 #endif
 
-static void do_bootstrap (void * args, int * pargc, const char *** pargv,
-                          const char *** penvp, ElfW(auxv_t) ** pauxv,
-                          void ** baseaddr, const char ** program_name)
+static void do_bootstrap (void * args,
+                          int * pargc, const char *** pargv,
+                          const char *** penvp,
+                          ElfW(auxv_t) ** pauxv)
 {
     const char ** all_args = (const char **) args;
     int argc = (uintptr_t) all_args[0];
     const char ** argv = &all_args[1];
     const char ** envp = argv + argc + 1;
-    void * base = NULL;
 
     /* fetch environment information from aux vectors */
     void ** auxv = (void **) envp + 1;
@@ -80,28 +85,29 @@ static void do_bootstrap (void * args, int * pargc, const char *** pargv,
                 pageshift = pagesize - 1;
                 pagemask  = ~pageshift;
                 break;
-            case AT_BASE:
-                base = (void *) av->a_un.a_val;
-                break;
         }
 
-    if (!base) {
-        asm ("leaq start(%%rip), %0\r\n"
-             "subq 1f(%%rip), %0\r\n"
-             ".section\t.data.rel.ro\r\n"
-             "1:\t.quad start\r\n"
-             ".previous\r\n"
-             : "=r" (base) : : "cc");
-    }
-
-    *program_name = *argv;
-    argv++;
-    argc--;
     *pargc = argc;
     *pargv = argv;
     *penvp = envp;
     *pauxv = (ElfW(auxv_t) *) auxv;
-    *baseaddr = base;
+}
+
+unsigned int reference_monitor;
+
+int sys_open(const char * path, int flags, int mode)
+{
+    if (reference_monitor) {
+        struct sys_open_param param = {
+            .filename = path,
+            .flags    = flags,
+            .mode     = mode,
+        };
+        return INLINE_SYSCALL(ioctl, 3, reference_monitor,
+                              GRM_SYS_OPEN, &param);
+    } else {
+        return INLINE_SYSCALL(open, 3, path, flags, mode);
+    }
 }
 
 int open_manifest (const char ** argv)
@@ -109,7 +115,7 @@ int open_manifest (const char ** argv)
     const char * manifest_name = *argv;
     int ret, fd;
 
-    fd = INLINE_SYSCALL(open, 3, manifest_name, O_RDONLY, 0);
+    fd = sys_open(manifest_name, O_RDONLY, 0);
     if (IS_ERR(fd))
         return -ERRNO(fd);
 
@@ -129,16 +135,16 @@ int open_manifest (const char ** argv)
     /* find a manifest file with the same name as executable */
     int len = strlen(*argv);
     manifest_name = __alloca(len + static_strlen(".manifest") + 1);
-    memcpy((void *) manifest_name, &argv, len);
+    memcpy((void *) manifest_name, *argv, len);
     memcpy((void *) manifest_name + len, ".manifest",
            static_strlen(".manifest"));
 
-    fd = INLINE_SYSCALL(open, 3, manifest_name, O_RDONLY, 0);
+    fd = sys_open(manifest_name, O_RDONLY, 0);
     if (!IS_ERR(fd))
         return fd;
 
     /* find "manifest" file */
-    fd = INLINE_SYSCALL(open, 3, "manifest", O_RDONLY, 0);
+    fd = sys_open("manifest", O_RDONLY, 0);
     if (!IS_ERR(fd))
         return fd;
 
@@ -176,61 +182,70 @@ int load_manifest (int fd, struct config_store * config)
     return 0;
 }
 
-static int do_relocate (ElfW(Dyn) * dyn, ElfW(Addr) addr)
+/* This is the hashing function specified by the ELF ABI.  In the
+   first five operations no overflow is possible so we optimized it a
+   bit.  */
+unsigned long int elf_hash (const char *name_arg)
 {
-    ElfW(Dyn) * dt_rela      = NULL;
-    ElfW(Dyn) * dt_relacount = NULL;
+    const unsigned char *name = (const unsigned char *) name_arg;
+    unsigned long int hash = 0;
 
-    for ( ; dyn->d_tag != DT_NULL ; dyn++)
-        switch (dyn->d_tag) {
-            case DT_RELA:       dt_rela = dyn;      break;
-            case DT_RELACOUNT:  dt_relacount = dyn; break;
-        }
+    if (*name == '\0')
+        return hash;
 
-    if (!dt_rela || !dt_relacount)
-        return -EINVAL;
+    hash = *name++;
+    if (*name == '\0')
+        return hash;
 
-    ElfW(Rela) * r = (void *) (addr + dt_rela->d_un.d_ptr);
-    ElfW(Rela) * end = r + dt_relacount->d_un.d_val;
+    hash = (hash << 4) + *name++;
+    if (*name == '\0')
+        return hash;
 
-    for ( ; r < end ; r++)
-        *(ElfW(Addr) *) (addr + r->r_offset) = addr + r->r_addend;
+    hash = (hash << 4) + *name++;
+    if (*name == '\0')
+        return hash;
 
-     return 0;
+    hash = (hash << 4) + *name++;
+    if (*name == '\0')
+        return hash;
+
+    hash = (hash << 4) + *name++;
+    while (*name != '\0') {
+        unsigned long int hi;
+        hash = (hash << 4) + *name++;
+        hi = hash & 0xf0000000;
+
+        /*
+         * The algorithm specified in the ELF ABI is as follows:
+         * if (hi != 0)
+         * hash ^= hi >> 24;
+         * hash &= ~hi;
+         * But the following is equivalent and a lot faster, especially on
+         *  modern processors.
+         */
+
+        hash ^= hi;
+        hash ^= hi >> 24;
+    }
+    return hash;
 }
 
 static void *
-find_symbol (const ElfW(Dyn) * dyn, ElfW(Addr) addr, const char * name)
+find_symbol (void * addr, ElfW(Word) * hashbuckets,
+             ElfW(Word) hashsize, ElfW(Word) * hashchain,
+             const ElfW(Sym) * symtab, const char * strtab,
+             const char * name)
 {
-    const ElfW(Dyn) * dt_symtab    = NULL;
-    const ElfW(Dyn) * dt_strtab    = NULL;
-    const ElfW(Dyn) * dt_rela      = NULL;
-    const ElfW(Dyn) * dt_relasz    = NULL;
-    const ElfW(Dyn) * dt_relacount = NULL;
-
-    for ( ; dyn->d_tag != DT_NULL ; dyn++)
-        switch (dyn->d_tag) {
-            case DT_SYMTAB:     dt_symtab = dyn;    break;
-            case DT_STRTAB:     dt_strtab = dyn;    break;
-            case DT_RELA:       dt_rela = dyn;      break;
-            case DT_RELASZ:     dt_relasz = dyn;    break;
-            case DT_RELACOUNT:  dt_relacount = dyn; break;
-        }
-
-    if (!dt_symtab || !dt_strtab || !dt_rela || !dt_relasz || !dt_relacount)
-        return NULL;
-
-    ElfW(Sym) * symtab = (void *) (addr + dt_symtab->d_un.d_ptr);
-    const char * strtab = (void *) (addr + dt_strtab->d_un.d_ptr);
-    ElfW(Rela) * r = (void *) (addr + dt_rela->d_un.d_ptr);
-    ElfW(Rela) * rel = r + dt_relacount->d_un.d_val;
-    ElfW(Rela) * end = r + dt_relasz->d_un.d_val / sizeof(ElfW(Rela));
+    unsigned long int hash = elf_hash(name);
     int len = strlen(name);
 
-    for (r = rel ; r < end ; r++) {
-        ElfW(Sym) * sym = &symtab[ELFW(R_SYM) (r->r_info)];
-        if (!sym->st_name)
-            continue;
+    /* Use the old SysV-style hash table.  Search the appropriate
+       hash bucket in this object's symbol table for a definition
+       for the same symbol name.  */
+    for (ElfW(Word) symidx = hashbuckets[hash % hashsize];
+         symidx != STN_UNDEF;
+         symidx = hashchain[symidx]) {
+        const ElfW(Sym) * sym = &symtab[symidx];
         if (!memcmp(strtab + sym->st_name, name, len + 1))
             return (void *) addr + sym->st_value;
     }
@@ -240,11 +255,15 @@ find_symbol (const ElfW(Dyn) * dyn, ElfW(Addr) addr, const char * name)
 
 static int load_static (const char * filename, void ** load_addr,
                         void ** entry, ElfW(Dyn) ** dyn,
-                        unsigned long * phoff, int * phnum)
+                        unsigned long * phoff, int * phnum,
+                        void ** code_start, void ** code_end,
+                        ElfW(Word) ** hashbuckets,
+                        ElfW(Word) * hashsize, ElfW(Word) ** hashchain,
+                        ElfW(Sym) ** symtab, const char ** strtab)
 {
     int ret = 0;
 
-    int fd = INLINE_SYSCALL(open, 2, filename, O_RDONLY|O_CLOEXEC);
+    int fd = sys_open(filename, O_RDONLY|O_CLOEXEC, 0);
     if (IS_ERR(fd))
         return -ERRNO(fd);
 
@@ -258,7 +277,8 @@ static int load_static (const char * filename, void ** load_addr,
     const ElfW(Ehdr) * header = (void *) filebuf;
     const ElfW(Phdr) * phdr = (void *) filebuf + header->e_phoff;
     const ElfW(Phdr) * ph;
-    ElfW(Addr) base = 0;
+    ElfW(Dyn) * dynamic = NULL;
+    ElfW(Addr) base = (ElfW(Addr)) *load_addr;
 
     *phoff = header->e_phoff;
     *phnum = header->e_phnum;
@@ -267,13 +287,13 @@ static int load_static (const char * filename, void ** load_addr,
         ElfW(Addr) mapstart, mapend, dataend, allocend;
         off_t mapoff;
         int prot;
-    } loadcmds[16], *c;
+    } loadcmds[16], *c, *text_loadcmd = NULL;
     int nloadcmds = 0;
 
     for (ph = phdr ; ph < &phdr[header->e_phnum] ; ph++)
         switch (ph->p_type) {
             case PT_DYNAMIC:
-                *dyn = (void *) ph->p_vaddr;
+                dynamic = (void *) ph->p_vaddr;
                 break;
 
             case PT_LOAD:
@@ -291,14 +311,17 @@ static int load_static (const char * filename, void ** load_addr,
                 c->prot = (ph->p_flags & PF_R ? PROT_READ  : 0) |
                           (ph->p_flags & PF_W ? PROT_WRITE : 0) |
                           (ph->p_flags & PF_X ? PROT_EXEC  : 0);
+                if (ph->p_flags & PF_X)
+                    text_loadcmd = c;
                 break;
         }
 
     c = loadcmds;
     int maplength = loadcmds[nloadcmds - 1].allocend - c->mapstart;
 
-    base = INLINE_SYSCALL(mmap, 6, NULL, maplength, c->prot,
-                          MAP_PRIVATE | MAP_FILE, fd, c->mapoff);
+    base = INLINE_SYSCALL(mmap, 6, base, maplength, c->prot,
+                          (base ? MAP_FIXED : 0) | MAP_PRIVATE | MAP_FILE,
+                          fd, c->mapoff);
 
     if (IS_ERR(base)) {
         ret = -ERRNO_P(base);
@@ -320,7 +343,8 @@ static int load_static (const char * filename, void ** load_addr,
 
 postmap:
         if (c == loadcmds)
-            INLINE_SYSCALL(munmap, 2, base + c->mapend, maplength - c->mapend);
+            INLINE_SYSCALL(mprotect, 3, base + c->mapend, maplength -
+                           c->mapend, PROT_NONE);
 
         if (c->allocend <= c->dataend)
             continue;
@@ -348,34 +372,52 @@ postmap:
         }
     }
 
-    *dyn = (void *) (base + (ElfW(Addr)) *dyn);
-    *load_addr = (void *) base;
-    *entry = (void *) base + header->e_entry;
+    dynamic = (void *) (base + (ElfW(Addr)) dynamic);
 
+    for (const ElfW(Dyn) * d = dynamic ; d->d_tag != DT_NULL ; d++)
+        switch (d->d_tag) {
+            case DT_SYMTAB:
+                *symtab = (void *) base + d->d_un.d_ptr;
+                break;
+            case DT_STRTAB:
+                *strtab = (void *) base + d->d_un.d_ptr;
+                break;
+            case DT_HASH: {
+                ElfW(Word) * hash = (void *) base + d->d_un.d_ptr;
+                /* Structure of DT_HASH:
+                     The bucket array forms the hast table itself.
+                     The entries in the chain array parallel the
+                     symbol table.
+                     [        nbucket        ]
+                     [        nchain         ]
+                     [       bucket[0]       ]
+                     [          ...          ]
+                     [   bucket[nbucket-1]   ]
+                     [       chain[0]        ]
+                     [          ...          ]
+                     [    chain[nchain-1]    ] */
+
+                *hashsize = *hash++;
+                hash++;
+                *hashbuckets = hash;
+                hash += *hashsize;
+                *hashchain = hash;
+                break;
+            }
+        }
+
+    *dyn = dynamic;
+    *load_addr  = (void *) base;
+    *entry      = (void *) base + header->e_entry;
+    *code_start = (void *) base + text_loadcmd->mapstart;
+    *code_end   = (void *) base + text_loadcmd->mapend;
 out:
     INLINE_SYSCALL(close, 1, fd);
     return ret;
 }
 
-static int find_code_range (void * load_addr, void ** start, void ** end)
-{
-    const ElfW(Ehdr) * header = load_addr;
-    const ElfW(Phdr) * phdr = load_addr + header->e_phoff, * ph;
-
-    for (ph = phdr ; ph < &phdr[header->e_phnum] ; ph++)
-        if (ph->p_type == PT_LOAD && (ph->p_flags & PF_X)) {
-            *start = load_addr + ph->p_vaddr;
-            *end = load_addr + ph->p_vaddr + ph->p_filesz;
-            return 0;
-        }
-
-    return -ENOENT;
-}
-
-void __attribute__((noinline)) ___dl_debug_state (void) {}
-
-extern __typeof(___dl_debug_state) _dl_debug_state
-    __attribute ((alias ("___dl_debug_state")));
+#ifdef DEBUG
+void __attribute__((noinline)) _dl_debug_state (void) {}
 
 struct link_map {
     ElfW(Addr)        l_addr;
@@ -386,34 +428,32 @@ struct link_map {
 
 static struct link_map init_link_map;
 
-struct r_debug ___r_debug =
-    { 1, NULL, (ElfW(Addr)) &___dl_debug_state, RT_CONSISTENT, 0 };
+struct r_debug _r_debug =
+    { 1, NULL, (ElfW(Addr)) &_dl_debug_state, RT_CONSISTENT, 0 };
+#endif
 
-extern __typeof(___r_debug) _r_debug
-    __attribute ((alias ("___r_debug")));
-
-int ioctl_set_graphene (struct config_store * sandbox_config, int npolices,
+int ioctl_set_graphene (int device, struct config_store * sandbox_config, int npolices,
                         const struct graphene_user_policy * policies);
 
-int set_sandbox (struct config_store * sandbox_config,
+int set_sandbox (int device, struct config_store * sandbox_config,
                  struct pal_sec * pal_sec_addr, void * pal_addr)
 {
     struct graphene_user_policy policies[] = {
-        { .type = GRAPHENE_LIB_NAME,    .value = PAL_LOADER, },
-        { .type = GRAPHENE_LIB_ADDR,    .value = pal_addr, },
-        { .type = GRAPHENE_UNIX_PREFIX, .value = &pal_sec_addr->pipe_prefix_id, },
-        { .type = GRAPHENE_MCAST_PORT,  .value = &pal_sec_addr->mcast_port, },
-        { .type = GRAPHENE_FS_PATH | GRAPHENE_FS_READ,
+        { .type  = GRAPHENE_UNIX_PREFIX,
+          .value = &pal_sec_addr->pipe_prefix, },
+        { .type  = GRAPHENE_MCAST_PORT,
+          .value = &pal_sec_addr->mcast_port, },
+        { .type  = GRAPHENE_FS_PATH | GRAPHENE_FS_READ,
           .value = "/proc/meminfo", },
     };
 
-    return ioctl_set_graphene(sandbox_config,
+    return ioctl_set_graphene(device, sandbox_config,
                               sizeof(policies) / sizeof(policies[0]),
                               policies);
 }
 
-int install_initial_syscall_filter (void);
-int install_syscall_filter (void * code_start, void * code_end);
+int install_initial_syscall_filter (int has_reference_monitor);
+int install_syscall_filter (void * pal_code_start, void * pal_code_end);
 
 void start(void);
 
@@ -431,74 +471,133 @@ asm ("start:\r\n"
 
 void do_main (void * args)
 {
-    const char * program_name;
     int argc;
     const char ** argv, ** envp;
     ElfW(auxv_t) * auxv;
-    void * baseaddr;
-    unsigned long pid = INLINE_SYSCALL(getpid, 0);
+    pid_t pid;
+    bool do_sandbox = false;
     int ret = 0;
 
-    do_bootstrap(args, &argc, &argv, &envp, &auxv, &baseaddr, &program_name);
+    do_bootstrap(args, &argc, &argv, &envp, &auxv);
 
     /* VERY IMPORTANT: This is the filter that gets applied to the startup code
      * before applying the real filter in the function install_syscall_filter.
      * If you face any issues, you may have to enable certain syscalls here to
      * successfully make changes to startup code. */
 
-    ret = install_initial_syscall_filter();
-    if (ret < 0) {
-        printf("Unable to install initial system call filter\n");
-        goto exit;
+    struct pal_sec * __pal_sec = __alloca(sizeof(struct pal_sec));
+
+    ret = INLINE_SYSCALL(read, 3, PROC_INIT_FD, __pal_sec,
+                         sizeof(struct pal_sec));
+
+    if (IS_ERR(ret)) {
+        if (ERRNO(ret) != EBADF)
+            goto exit;
+
+        for (const char ** env = envp ; *env ; env++) {
+            /* check if "SANDBOX=1" is specified in the environment variables */
+            const char * e = *env;
+            if (strequal_static(e, "SANDBOX=1")) {
+                do_sandbox = true;
+                break;
+            }
+        }
+
+        /* occupy PAL_INIT_FD */
+        INLINE_SYSCALL(dup2, 2, 0, PROC_INIT_FD);
+        __pal_sec = NULL;
+
+        if (do_sandbox) {
+            /* open the ioctl device of reference monitor */
+            ret = INLINE_SYSCALL(open, 2, GRM_FILE, O_RDONLY);
+            if (ret < 0) {
+                printf("Unable to open the ioctl device of reference monitor\n");
+                goto exit;
+            } else {
+                reference_monitor = ret;
+            }
+        }
+
+        /* get the pid before it closes */
+        pid = INLINE_SYSCALL(getpid, 0);
+
+        ret = install_initial_syscall_filter((reference_monitor > 0));
+        if (ret < 0) {
+            printf("Unable to install initial system call filter\n");
+            goto exit;
+        }
+    } else {
+        if (ret != sizeof(struct pal_sec)) {
+            ret = -EINVAL;
+            goto exit;
+        }
+
+        pid = __pal_sec->process_id;
+        reference_monitor = __pal_sec->reference_monitor;
+        do_sandbox = (reference_monitor != 0);
     }
 
-    /* occupy PAL_INIT_FD */
-    INLINE_SYSCALL(dup2, 2, 0, PROC_INIT_FD);
+#ifdef DEBUG
+    init_link_map.l_addr = (ElfW(Addr)) TEXT_START;
+    init_link_map.l_ld = NULL;
+    init_link_map.l_name = argv[0];
 
-    ElfW(Dyn) * dyn = (ElfW(Dyn) *) (baseaddr + (ElfW(Addr)) &_DYNAMIC);
-    do_relocate(dyn, (ElfW(Addr)) baseaddr);
+    _r_debug.r_state = RT_ADD;
+    _dl_debug_state();
 
-    init_link_map.l_addr = (ElfW(Addr)) baseaddr;
-    init_link_map.l_ld   = dyn;
-    init_link_map.l_name = program_name;
-    ___r_debug.r_map     = &init_link_map;
-    ___r_debug.r_ldbase  = (ElfW(Addr)) baseaddr;
+    _r_debug.r_map = &init_link_map;
 
-    int manifest;
-    if (!argc || (manifest = open_manifest(argv)) < 0) {
-        printf("USAGE: %s [executable|manifest] args ...\n", program_name);
-        goto exit;
-    }
-
-    struct config_store sandbox_config;
-    ret = load_manifest(manifest, &sandbox_config);
-    if (ret < 0)
-        goto exit;
+    _r_debug.r_state = RT_CONSISTENT;
+    _dl_debug_state();
+#endif
 
     void *        pal_addr  = NULL;
     void *        pal_entry = NULL;
     ElfW(Dyn) *   pal_dyn   = NULL;
     unsigned long pal_phoff = 0;
     int           pal_phnum = 0;
+    void *        pal_code_start  = NULL;
+    void *        pal_code_end    = NULL;
+    ElfW(Word) *  pal_hashbuckets = NULL;
+    ElfW(Word)    pal_hashsize    = 0;
+    ElfW(Word) *  pal_hashchain   = NULL;
+    ElfW(Sym) *   pal_symtab = NULL;
+    const char *  pal_strtab = NULL;
+
+    /* if the current process is a child, load PAL at the exactly
+       same address as in the parent */
+    if (__pal_sec)
+        pal_addr = __pal_sec->load_address;
 
     ret = load_static(PAL_LOADER, &pal_addr, &pal_entry, &pal_dyn,
-                      &pal_phoff, &pal_phnum);
+                      &pal_phoff, &pal_phnum,
+                      &pal_code_start, &pal_code_end,
+                      &pal_hashbuckets, &pal_hashsize,
+                      &pal_hashchain,
+                      &pal_symtab, &pal_strtab);
 
     if (ret < 0) {
         printf("Unable to load PAL loader\n");
         goto exit;
     }
 
-    int rand_gen = INLINE_SYSCALL(open, 3, RANDGEN_DEVICE, O_RDONLY, 0);
-    if (IS_ERR(rand_gen)) {
-        printf("Unable to open random generator device\n");
+    struct pal_sec * pal_sec_addr =
+            find_symbol(pal_addr, pal_hashbuckets, pal_hashsize,
+                        pal_hashchain, pal_symtab, pal_strtab,
+                        "pal_sec");
+    if (!pal_sec_addr) {
+        printf("Unable to find 'pal_sec' in PAL loader\n");
         goto exit;
     }
 
-    struct pal_sec * pal_sec_addr =
-                find_symbol(pal_dyn, (ElfW(Addr)) pal_addr, "pal_sec");
-    if (!pal_sec_addr) {
-        printf("Unable to find 'pal_sec' in PAL loader\n");
+    if (__pal_sec) {
+        memcpy(pal_sec_addr, __pal_sec, sizeof(struct pal_sec));
+        goto done_child;
+    }
+
+    int rand_gen = sys_open(RANDGEN_DEVICE, O_RDONLY, 0);
+    if (IS_ERR(rand_gen)) {
+        printf("Unable to open random generator device\n");
         goto exit;
     }
 
@@ -509,59 +608,66 @@ void do_main (void * args)
         goto exit;
     }
 
+    pal_sec_addr->reference_monitor = reference_monitor;
+    pal_sec_addr->load_address    = pal_addr;
     pal_sec_addr->process_id      = pid;
     pal_sec_addr->random_device   = rand_gen;
-    pal_sec_addr->pipe_prefix_id  = 0;
     pal_sec_addr->mcast_port      = mcast_port % (65536 - 1024) + 1024;
-    pal_sec_addr->_dl_debug_state = &___dl_debug_state;
-    pal_sec_addr->_r_debug        = &___r_debug;
 
-    ret = set_sandbox(&sandbox_config, pal_sec_addr, pal_addr);
+    /* if "SANDBOX=1" if given, initiate the reference monitor */
+    if (do_sandbox) {
+        int manifest;
+        if (!argc || (manifest = open_manifest(argv + 1)) < 0) {
+            printf("USAGE: %s [executable|manifest] args ...\n", "pal-sec");
+            goto exit;
+        }
+
+        struct config_store sandbox_config;
+        ret = load_manifest(manifest, &sandbox_config);
+        if (ret < 0)
+            goto exit;
+
+
+        ret = set_sandbox(reference_monitor, &sandbox_config,
+                          pal_sec_addr, pal_addr);
+        if (ret < 0) {
+            printf("Unable to load sandbox policies\n");
+            goto exit;
+        }
+    }
+
+    ret = install_syscall_filter(pal_code_start, pal_code_end);
     if (ret < 0) {
-        printf("Unable to load sandbox policies\n");
+        printf("Unable to install system call filter\n");
         goto exit;
     }
 
     /* free PAL_INIT_FD */
     INLINE_SYSCALL(close, 1, PROC_INIT_FD);
 
-    void * code_start = NULL;
-    void * code_end   = NULL;
-    ret = find_code_range(pal_addr, &code_start, &code_end);
-    if (ret < 0) {
-        printf("Unable to find a code segment\n");
-        goto exit;
-    }
+done_child:
 
-    ret = install_syscall_filter(code_start, code_end);
-    if (ret < 0) {
-        printf("Unable to install system call filter\n");
-        goto exit;
-    }
+#ifdef DEBUG
+    pal_sec_addr->r_debug_addr = &_r_debug;
+    pal_sec_addr->dl_debug_state_addr = &_dl_debug_state;
 
-    /* after installing syscall, you can't execute any system call */
-    const char ** new_envp, ** new_argv;
-    ElfW(auxv_t) * new_auxv;
-    int envc = 1, auxc = 1;
-    for (const char ** e = envp ; *e ; e++, envc++);
-    for (ElfW(auxv_t) * av = auxv ; av->a_type != AT_NULL ; av++, auxc++);
+    struct link_map * pal_map = malloc(sizeof(struct link_map));
+    pal_map->l_name = PAL_LOADER;
+    pal_map->l_addr = (ElfW(Addr)) pal_addr;
+    pal_map->l_ld   = pal_dyn;
 
-    /* skip 1024 bytes as a red zone */
-    void * stack = __alloca(sizeof(unsigned long) +
-                            sizeof(char *) * (argc + 2) +
-                            sizeof(char *) * envc +
-                            sizeof(ElfW(auxv_t)) * auxc);
+    _r_debug.r_state = RT_ADD;
+    _dl_debug_state();
 
-    *(unsigned long *) stack = argc + 1;
-    new_argv = stack + sizeof(unsigned long *);
-    new_envp = (void *) &new_argv[argc + 2];
-    new_auxv = (void *) &new_envp[envc + 1];
-    new_argv[0] = PAL_LOADER;
-    memcpy(&new_argv[1], argv, sizeof(char *) * (argc + 1));
-    memcpy(new_envp, envp, sizeof(char *) * envc);
-    memcpy(new_auxv, auxv, sizeof(ElfW(auxv_t)) * auxc);
+    init_link_map.l_next = pal_map;
+    pal_map->l_prev = &init_link_map;
 
-    for (ElfW(auxv_t) * av = new_auxv ; av->a_type != AT_NULL ; av++)
+    _r_debug.r_state = RT_CONSISTENT;
+    _dl_debug_state();
+#endif
+
+    /* just hand the original stack to the PAL loader */
+    for (ElfW(auxv_t) * av = auxv ; av->a_type != AT_NULL ; av++)
         switch (av->a_type) {
             case AT_ENTRY:
                 av->a_un.a_val = (unsigned long) pal_entry;
@@ -580,7 +686,9 @@ void do_main (void * args)
     asm volatile ("xorq %%rsp, %%rsp\r\n"
                   "movq %0, %%rsp\r\n"
                   "jmpq *%1\r\n"
-                  :: "r"(stack), "r"(pal_entry) : "memory");
+                  :: "r"(args), "r"(pal_entry) : "memory");
+
+    /* should never return */
 
 exit:
     INLINE_SYSCALL(exit_group, 1, ret);

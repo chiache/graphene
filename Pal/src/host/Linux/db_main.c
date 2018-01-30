@@ -213,8 +213,6 @@ void pal_linux_main (void * args)
     int argc;
     PAL_HANDLE first_thread;
 
-    unsigned long start_time = _DkSystemTimeQueryEarly();
-
     /* parse argc, argv, envp and auxv */
     pal_init_bootstrap(args, &pal_name, &argc, &argv, &envp);
 
@@ -225,6 +223,7 @@ void pal_linux_main (void * args)
 
     ELF_DYNAMIC_RELOCATE(&pal_map);
 
+    linux_state.loader_name = pal_name;
     linux_state.environ = envp;
 
     init_slab_mgr(pagesz);
@@ -236,24 +235,19 @@ void pal_linux_main (void * args)
         setup_vdso_map(sysinfo_ehdr);
 #endif
 
-    pal_state.start_time = start_time;
     init_child_process(&parent, &exec, &manifest);
 
-    if (!pal_sec.process_id)
-        pal_sec.process_id = INLINE_SYSCALL(getpid, 0);
-    linux_state.pid = pal_sec.process_id;
-
+    linux_state.parent_process_id = pal_sec.parent_process_id;
+    linux_state.process_id = pal_sec.process_id
+        = pal_sec.process_id ? : INLINE_SYSCALL(getpid, 0);
     linux_state.uid = uid;
     linux_state.gid = gid;
-    linux_state.process_id = (start_time & (~0xffff)) | linux_state.pid;
-
-    if (!linux_state.parent_process_id)
-        linux_state.parent_process_id = linux_state.process_id;
+    linux_state.memory_quota = pal_sec.memory_quota;
 
     if (parent)
         goto done_init;
 
-    int fd = INLINE_SYSCALL(open, 3, argv[0], O_RDONLY|O_CLOEXEC, 0);
+    int fd = sys_open(argv[0], O_RDONLY|O_CLOEXEC, 0);
     if (IS_ERR(fd)) {
         // DEP 10/20/16: Don't silently swallow permission errors
         // accessing the manifest
@@ -288,7 +282,7 @@ done_init:
 
     first_thread = malloc(HANDLE_SIZE(thread));
     SET_HANDLE_TYPE(first_thread, thread);
-    first_thread->thread.tid = linux_state.pid;
+    first_thread->thread.tid = linux_state.process_id;
 
     signal_setup();
 
@@ -418,4 +412,80 @@ void _DkGetCPUInfo (PAL_CPU_INFO * ci)
 
     flags[flen ? flen - 1 : 0] = 0;
     ci->cpu_flags = flags;
+}
+
+int sys_open(const char * path, int flags, int mode)
+{
+    if (pal_sec.reference_monitor) {
+        struct sys_open_param param = {
+            .filename = path,
+            .flags    = flags,
+            .mode     = mode,
+        };
+        return INLINE_SYSCALL(ioctl, 3, pal_sec.reference_monitor,
+                              GRM_SYS_OPEN, &param);
+    } else {
+        return INLINE_SYSCALL(open, 3, path, flags, mode);
+    }
+}
+
+int sys_stat(const char * path, struct stat * statbuf)
+{
+    if (pal_sec.reference_monitor) {
+        struct sys_stat_param param = {
+            .filename = path,
+            .statbuf  = statbuf,
+        };
+        return INLINE_SYSCALL(ioctl, 3, pal_sec.reference_monitor,
+                              GRM_SYS_STAT, &param);
+    } else {
+        return INLINE_SYSCALL(stat, 2, path, statbuf);
+    }
+}
+
+int sys_execve (const char * path, const char * const * argv,
+                const char * const * envp)
+{
+    if (pal_sec.reference_monitor) {
+        struct sys_execve_param param = {
+            /* mask out the filename, the reference monitor
+               always run the same executable */
+            .argv     = (void *) argv,
+            /* envp is also ignored */
+        };
+        return INLINE_SYSCALL(ioctl, 3, pal_sec.reference_monitor,
+                              GRM_SYS_EXECVE, &param);
+    } else {
+        return INLINE_SYSCALL(execve, 3, path, argv, envp);
+    }
+}
+
+int sys_bind (int sockfd, struct sockaddr * addr, int addrlen)
+{
+    if (pal_sec.reference_monitor) {
+        struct sys_bind_connect_param param = {
+            .sockfd   = sockfd,
+            .addr     = addr,
+            .addrlen  = addrlen,
+        };
+        return INLINE_SYSCALL(ioctl, 3, pal_sec.reference_monitor,
+                              GRM_SYS_BIND, &param);
+    } else {
+        return INLINE_SYSCALL(bind, 3, sockfd, addr, addrlen);
+    }
+}
+
+int sys_connect (int sockfd, struct sockaddr * addr, int addrlen)
+{
+    if (pal_sec.reference_monitor) {
+        struct sys_bind_connect_param param = {
+            .sockfd   = sockfd,
+            .addr     = addr,
+            .addrlen  = addrlen,
+        };
+        return INLINE_SYSCALL(ioctl, 3, pal_sec.reference_monitor,
+                              GRM_SYS_CONNECT, &param);
+    } else {
+        return INLINE_SYSCALL(connect, 3, sockfd, addr, addrlen);
+    }
 }

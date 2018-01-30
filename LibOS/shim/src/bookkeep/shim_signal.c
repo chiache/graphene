@@ -297,32 +297,41 @@ ret_exception:
     DkExceptionReturn(event);
 }
 
+void syscall_wrapper (void);
+
 static void illegal_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
 {
     if (IS_INTERNAL_TID(get_cur_tid()) || is_internal(context)) {
-internal:
         internal_fault("Internal illegal fault", arg, context);
         pause();
         goto ret_exception;
     }
 
-    struct shim_vma * vma = NULL;
+    uint8_t * pc = (void *) context->IP;
 
-    if (!(lookup_supervma((void *) arg, 0, &vma)) &&
-        !(vma->flags & VMA_INTERNAL)) {
-        if (context)
-            debug("illegal instruction at %p\n", context->IP);
-
-        if (vma)
-            put_vma(vma);
-
-        deliver_signal(ALLOC_SIGINFO(SIGILL, ILL_ILLOPC, si_addr, (void *) arg), context);
-    } else {
-        if (vma)
-            put_vma(vma);
-
-        goto internal;
+#ifdef __x86_64__
+    /*
+     * static (hard-coded) system call interception:
+     *   if the illegal instruction is a "syscall" (0f 05), try to process
+     *   the exception as a static system call.
+     *   (1) placing register values
+     *   (2) call syscalldb
+     *   (3) setting RAX back to the exception context
+     */
+    if (pc[-2] == 0x0f && pc[-1] == 0x05) {
+        debug("caught a static syscall (syscall no = %d)\n", context->rax);
+        /* Delay system call redirection until returning from host
+           exception handling. As a principle, we should not stay in an
+           exception upcall too long. */
+        context->rbx = context->IP;
+        context->IP  = (uint64_t) syscall_wrapper;
+        goto ret_exception;
     }
+#endif
+
+    debug("illegal instruction at %p\n", pc);
+
+    deliver_signal(ALLOC_SIGINFO(SIGILL, ILL_ILLOPC, si_addr, pc), context);
 
 ret_exception:
     DkExceptionReturn(event);

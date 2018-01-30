@@ -68,8 +68,8 @@ static void * old_stack_top, * old_stack, * old_stack_red;
 static const char ** new_argp;
 static int           new_argc;
 static elf_auxv_t *  new_auxp;
-
-#define REQUIRED_ELF_AUXV       6
+static int           new_nauxv;
+static void *        new_stack_top;
 
 int init_brk_from_executable (struct shim_handle * exec);
 
@@ -108,8 +108,8 @@ int shim_do_execve_rtld (struct shim_handle * hdl, const char ** argv,
     new_argc = 0;
     for (const char ** a = argv ; *a ; a++, new_argc++);
 
-    if ((ret = init_stack(argv, envp, &new_argp,
-                          REQUIRED_ELF_AUXV, &new_auxp)) < 0)
+    if ((ret = init_stack(argv, envp, &new_argp, &new_nauxv, &new_auxp,
+                          &new_stack_top)) < 0)
         return ret;
 
     SAVE_PROFILE_INTERVAL(alloc_new_stack_for_exec);
@@ -150,7 +150,7 @@ int shim_do_execve_rtld (struct shim_handle * hdl, const char ** argv,
 
     debug("execve: start execution\n");
     execute_elf_object(cur_thread->exec, new_argc, new_argp,
-                       REQUIRED_ELF_AUXV, new_auxp);
+                       new_nauxv, new_auxp, new_stack_top);
 
     return 0;
 }
@@ -356,7 +356,9 @@ err:
     SAVE_PROFILE_INTERVAL(open_file_for_exec);
 
 #if EXECVE_RTLD == 1
-    if (!strcmp_static(PAL_CB(host_type), "Linux-SGX")) {
+    /* if the host is not Linux-SGX, try reloading the binary
+       in the current process */
+    if (!strequal_static(PAL_CB(host_type), "Linux-SGX")) {
         int is_last = check_last_thread(cur_thread) == 0;
         if (is_last) {
             debug("execve() in the same process\n");

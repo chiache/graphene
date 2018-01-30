@@ -33,7 +33,7 @@
 #include "pal_security.h"
 #include "pal_error.h"
 #include "api.h"
-#include "graphene.h"
+#include "graphene-sandbox.h"
 
 #include <linux/types.h>
 #include <linux/poll.h>
@@ -377,7 +377,7 @@ static int tcp_listen (PAL_HANDLE * handle, char * uri, int options)
     INLINE_SYSCALL(setsockopt, 5, fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr,
                    sizeof(int));
 
-    ret = INLINE_SYSCALL(bind, 3, fd, bind_addr, bind_addrlen);
+    ret = sys_bind(fd, bind_addr, bind_addrlen);
 
     if (IS_ERR(ret)) {
         switch(ERRNO(ret)) {
@@ -514,7 +514,7 @@ static int tcp_connect (PAL_HANDLE * handle, char * uri, int options)
                        sizeof(int));
     }
 
-    ret = INLINE_SYSCALL(connect, 3, fd, dest_addr, dest_addrlen);
+    ret = sys_connect(fd, dest_addr, dest_addrlen);
 
     if (IS_ERR(ret) && ERRNO(ret) == EINPROGRESS) {
         struct pollfd pfd = { .fd = fd, .events = POLLOUT, .revents = 0 };
@@ -565,10 +565,10 @@ static int tcp_open (PAL_HANDLE *handle, const char * type, const char * uri,
     char uri_buf[PAL_SOCKADDR_SIZE];
     memcpy(uri_buf, uri, uri_len);
 
-    if (strpartcmp_static(type, "tcp.srv:"))
+    if (strstartswith_static(type, "tcp.srv:"))
         return tcp_listen(handle, uri_buf, options);
 
-    if (strpartcmp_static(type, "tcp:"))
+    if (strstartswith_static(type, "tcp:"))
         return tcp_connect(handle, uri_buf, options);
 
     return -PAL_ERROR_NOTSUPPORT;
@@ -689,7 +689,7 @@ static int udp_bind (PAL_HANDLE * handle, char * uri, int options)
                        sizeof(int));
     }
 
-    ret = INLINE_SYSCALL(bind, 3, fd, bind_addr, bind_addrlen);
+    ret = sys_bind(fd, bind_addr, bind_addrlen);
 
     if (IS_ERR(ret)) {
         switch (ERRNO(ret)) {
@@ -752,7 +752,7 @@ static int udp_connect (PAL_HANDLE * handle, char * uri, int options)
     }
 
     if (bind_addr) {
-        ret = INLINE_SYSCALL(bind, 3, fd, bind_addr, bind_addrlen);
+        ret = sys_bind(fd, bind_addr, bind_addrlen);
 
         if (IS_ERR(ret)) {
             switch (ERRNO(ret)) {
@@ -798,10 +798,10 @@ static int udp_open (PAL_HANDLE *hdl, const char * type, const char * uri,
     memcpy(buf, uri, len + 1);
     options &= PAL_OPTION_MASK;
 
-    if (strpartcmp_static(type, "udp.srv:"))
+    if (strstartswith_static(type, "udp.srv:"))
         return udp_bind(hdl, buf, options);
 
-    if (strpartcmp_static(type, "udp:"))
+    if (strstartswith_static(type, "udp:"))
         return udp_connect(hdl, buf, options);
 
     return -PAL_ERROR_NOTSUPPORT;
@@ -881,7 +881,7 @@ static int64_t udp_receivebyaddr (PAL_HANDLE handle, uint64_t offset, uint64_t l
                 return unix_to_pal_error(ERRNO(bytes));
         }
 
-    char * addr_uri = strcpy_static(addr, "udp:", addrlen);
+    char * addr_uri = stpncpy_static(addr, "udp:", addrlen);
     if (!addr_uri)
         return -PAL_ERROR_OVERFLOW;
 
@@ -945,7 +945,8 @@ static int64_t udp_sendbyaddr (PAL_HANDLE handle, uint64_t offset, uint64_t len,
     if (handle->sock.fd == PAL_IDX_POISON)
         return -PAL_ERROR_BADHANDLE;
 
-    if (!strpartcmp_static(addr, "udp:"))
+    /* only accept udp:xxx */
+    if (!strstartswith_static(addr, "udp:"))
         return -PAL_ERROR_INVAL;
 
     addr    += static_strlen("udp:");
@@ -1343,7 +1344,7 @@ PAL_HANDLE _DkBroadcastStreamOpen (void)
     INLINE_SYSCALL(setsockopt, 5, cli, SOL_SOCKET, SO_REUSEADDR,
                    &reuse, sizeof(reuse));
 
-    ret = INLINE_SYSCALL(bind, 3, cli, &addr, sizeof(addr));
+    ret = sys_bind(cli, (struct sockaddr *) &addr, sizeof(addr));
     if (IS_ERR(ret))
         goto err_cli;
 

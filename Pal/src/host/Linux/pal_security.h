@@ -23,8 +23,10 @@
 #include <linux/limits.h>
 #include <sysdeps/generic/ldsodefs.h>
 
+#include "graphene-sandbox.h"
 #include "pal.h"
 
+#ifdef DEBUG
 /* Rendezvous structure used by the run-time dynamic linker to communicate
    details of shared object loading to the debugger.  If the executable's
    dynamic section has a DT_DEBUG element, the run-time linker sets that
@@ -51,26 +53,36 @@ struct r_debug {
     ElfW(Addr) r_ldbase;    /* Base address the linker is loaded at.  */
 };
 
-void pal_dl_debug_state (void);
 
 /* This structure communicates dl state to the debugger.  The debugger
    normally finds it via the DT_DEBUG entry in the dynamic section, but in
    a statically-linked program there is no dynamic section for the debugger
    to examine and it looks for this particular symbol name.  */
 extern struct r_debug pal_r_debug;
+#endif
+
+#include <graphene-rm.h>
 
 extern struct pal_sec {
     /* system variables */
+    void *          load_address;
+    unsigned int    parent_process_id;
     unsigned int    process_id;
-    int             random_device;
+    unsigned int    random_device;
+
+    /* fd for reference monitor */
+    unsigned int    reference_monitor;
 
     /* pipes and sockets */
-    unsigned long   pipe_prefix_id;
+    char            pipe_prefix[GRAPHENE_UNIX_PREFIX_SIZE];
     unsigned short  mcast_port;
 
-    /* for debugger */
-    void (*_dl_debug_state) (void);
-    struct r_debug * _r_debug;
+    uint64_t        memory_quota;
+
+#ifdef DEBUG
+    struct r_debug * r_debug_addr;
+    void (*dl_debug_state_addr) (void);
+#endif
 } pal_sec;
 
 #define PROC_INIT_FD    255

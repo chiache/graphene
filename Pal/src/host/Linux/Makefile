@@ -2,7 +2,7 @@ include Makefile.am
 
 CFLAGS	+= -I. -Iinclude -I../.. -I../../../include -I../../../lib \
 	   -I../../../ipc/linux \
-	   -I../../../linux-kernel/graphene
+	   -I../../../security/linux
 ASFLAGS += -I. -Iinclude -I../.. -I../../../include
 
 ifeq ($(PROFILING),1)

@@ -46,10 +46,8 @@ static int file_open (PAL_HANDLE * handle, const char * type, const char * uri,
                       int access, int share, int create, int options)
 {
     /* try to do the real open */
-    int ret = INLINE_SYSCALL(open, 3, uri,
-                             HOST_ACCESS(access)|create|options|O_CLOEXEC,
-                             share);
-
+    int ret = sys_open(uri, HOST_ACCESS(access)|create|options|O_CLOEXEC,
+                       share);
     if (IS_ERR(ret))
         return unix_to_pal_error(ERRNO(ret));
 
@@ -227,7 +225,7 @@ static int file_attrquery (const char * type, const char * uri,
 {
     struct stat stat_buf;
     /* try to do the real open */
-    int ret = INLINE_SYSCALL(stat, 2, uri, &stat_buf);
+    int ret = sys_stat(uri, &stat_buf);
 
     /* if it failed, return the right error code */
     if (IS_ERR(ret))
@@ -283,7 +281,7 @@ static int file_getname (PAL_HANDLE handle, char * buffer, int count)
         return 0;
 
     int len = strlen(handle->file.realpath);
-    char * tmp = strcpy_static(buffer, "file:", count);
+    char * tmp = stpncpy_static(buffer, "file:", count);
 
     if (!tmp || buffer + count < tmp + len + 1)
         return -PAL_ERROR_TOOLONG;
@@ -330,7 +328,7 @@ static int dir_open (PAL_HANDLE * handle, const char * type, const char * uri,
             return -PAL_ERROR_STREAMEXIST;
     }
 
-    ret = INLINE_SYSCALL(open, 3, uri, O_DIRECTORY|options|O_CLOEXEC, 0);
+    ret = sys_open(uri, O_DIRECTORY|options|O_CLOEXEC, 0);
 
     if (IS_ERR(ret))
         return unix_to_pal_error(ERRNO(ret));
@@ -501,7 +499,7 @@ static int dir_getname (PAL_HANDLE handle, char * buffer, int count)
         return 0;
 
     int len = strlen(handle->dir.realpath);
-    char * tmp = strcpy_static(buffer, "dir:", count);
+    char * tmp = stpncpy_static(buffer, "dir:", count);
 
     if (!tmp || buffer + count < tmp + len + 1)
         return -PAL_ERROR_TOOLONG;

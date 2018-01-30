@@ -28,6 +28,7 @@
 #include "pal.h"
 #include "pal_internal.h"
 #include "pal_linux.h"
+#include "pal_security.h"
 #include "pal_error.h"
 #include "pal_debug.h"
 #include "api.h"
@@ -75,7 +76,7 @@ int _DkVirtualMemoryProtect (void * addr, uint64_t size, int prot)
 
 static int read_proc_meminfo (const char * key, unsigned long * val)
 {
-    int fd = INLINE_SYSCALL(open, 3, "/proc/meminfo", O_RDONLY, 0);
+    int fd = sys_open("/proc/meminfo", O_RDONLY, 0);
 
     if (IS_ERR(fd))
         return -PAL_ERROR_DENIED;
