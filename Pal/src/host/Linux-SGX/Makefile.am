@@ -22,6 +22,11 @@ LDFLAGS	= -shared -nostdlib -z combreloc -z defs \
 	  --hash-style=gnu -e enclave_entry
 ARFLAGS	=
 
+ifeq ($(DIET),1)
+CFLAGS += -ffunction-sections -fdata-sections
+LDFLAGS += -gc-sections
+endif
+
 CRYPTO_PROVIDER = mbedtls
 CFLAGS += -DCRYPTO_USE_MBEDTLS
 
