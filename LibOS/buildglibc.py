@@ -32,12 +32,15 @@ commandStr = ""
 commandOutput = ""
 quiet = False
 debug_flags = ""
+optimize_flags = "-O2"
 
 for arg in sys.argv[1:]:
     if arg == '--quiet' or arg == '-q':
         quiet = True
     if arg == '--debug':
         debug_flags = "-g"
+    if arg == '--diet':
+        optimize_flags = "-Os"
 
 if True:
 
@@ -100,7 +103,7 @@ if True:
 
     os.chdir(buildDir)
 
-    cflags = '{0} -O2 -U_FORTIFY_SOURCE -fno-stack-protector'.format(debug_flags)
+    cflags = '{0} {1} -U_FORTIFY_SOURCE -fno-stack-protector'.format(debug_flags, optimize_flags)
     extra_defs = ''
     disabled_features = { 'nscd' }
     extra_flags = '--with-tls --enable-add-ons=nptl --without-selinux --disable-test {0}'.format(' '.join(['--disable-' + f for f in disabled_features]))

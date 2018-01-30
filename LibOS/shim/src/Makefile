@@ -8,9 +8,15 @@ AS	= gcc
 AR	= ar rcs
 LD	= ld
 
+ifeq ($(DIET),1)
+OFLAGS = -Os -DDIET=1
+else
+OFLAGS = -O2
+endif
+
 OMIT_FRAME_POINTER = no
 
-CFLAGS	= -Wall -fPIC -std=gnu99 -fgnu89-inline -Winline -Wwrite-strings \
+CFLAGS	= -Wall -fPIC $(OFLAGS) -std=gnu99 -fgnu89-inline -Winline -Wwrite-strings \
 	  -fmerge-all-constants -Wstrict-prototypes \
 	  -Werror=implicit-function-declaration \
 	  -fno-stack-protector -fno-builtin -Wno-inline \

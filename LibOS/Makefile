@@ -24,11 +24,9 @@ $(BUILD_DIR)/Build.success: $(BUILD_DIR)/Makefile
 $(GLIBC_TARGET): $(BUILD_DIR)/Build.success
 
 $(BUILD_DIR)/Makefile: $(addprefix $(GLIBC_SRC)/,configure elf/Versions nptl/Versions dlfcn/Versions)
-ifeq ($(DEBUG),1)
-	./buildglibc.py --quiet --debug
-else
-	./buildglibc.py --quiet
-endif
+	./buildglibc.py --quiet \
+		$(if $(filter 1,$(DEBUG)),--debug) \
+		$(if $(filter 1,$(DIET)),--diet)
 
 ifeq ($(shell git ls-files $(GLIBC_SRC)/configure),)
 $(GLIBC_SRC)/configure: $(GLIBC_SRC).patch

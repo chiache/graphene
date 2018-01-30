@@ -7,7 +7,13 @@ AS	= gcc
 AR	= ar rcs
 LD	= ld
 
-CFLAGS	= -Wall -fPIC -O2 -std=gnu99 -fgnu89-inline -U_FORTIFY_SOURCE \
+ifeq ($(DIET),1)
+OFLAGS = -Os -DDIET=1
+else
+OFLAGS = -O2
+endif
+
+CFLAGS	= -Wall -fPIC $(OFLAGS) -std=gnu99 -fgnu89-inline -U_FORTIFY_SOURCE \
 	  -fno-omit-frame-pointer \
 	  -fno-stack-protector -fno-builtin
 ASFLAGS = -DPIC -DSHARED -fPIC -DASSEMBLER -Wa,--noexecstack \
