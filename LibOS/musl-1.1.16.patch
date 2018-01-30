@@ -1,0 +1,338 @@
+diff --git a/Makefile b/Makefile
+index d2e8997..5f57585 100644
+--- a/Makefile
++++ b/Makefile
+@@ -46,7 +46,7 @@ CFLAGS_AUTO = -Os -pipe
+ CFLAGS_C99FSE = -std=c99 -ffreestanding -nostdinc 
+ 
+ CFLAGS_ALL = $(CFLAGS_C99FSE)
+-CFLAGS_ALL += -D_XOPEN_SOURCE=700 -I$(srcdir)/arch/$(ARCH) -I$(srcdir)/arch/generic -Iobj/src/internal -I$(srcdir)/src/internal -Iobj/include -I$(srcdir)/include
++CFLAGS_ALL += -D_XOPEN_SOURCE=700 -I$(srcdir)/arch/$(ARCH) -I$(srcdir)/arch/generic -Iobj/src/internal -I$(srcdir)/src/internal -Iobj/include -I$(srcdir)/include -I../shim/include
+ CFLAGS_ALL += $(CPPFLAGS) $(CFLAGS_AUTO) $(CFLAGS)
+ 
+ LDFLAGS_ALL = $(LDFLAGS_AUTO) $(LDFLAGS)
+diff --git a/arch/x86_64/syscall_arch.h b/arch/x86_64/syscall_arch.h
+index 54e05ff..c1616a3 100644
+--- a/arch/x86_64/syscall_arch.h
++++ b/arch/x86_64/syscall_arch.h
+@@ -1,24 +1,26 @@
+ #define __SYSCALL_LL_E(x) (x)
+ #define __SYSCALL_LL_O(x) (x)
+ 
++#include <syscalldb.h>
++
+ static __inline long __syscall0(long n)
+ {
+ 	unsigned long ret;
+-	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n) : "rcx", "r11", "memory");
++	__asm__ __volatile__ (SYSCALLDB : "=a"(ret) : "a"(n) : "rcx", "r11", "memory");
+ 	return ret;
+ }
+ 
+ static __inline long __syscall1(long n, long a1)
+ {
+ 	unsigned long ret;
+-	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "rcx", "r11", "memory");
++	__asm__ __volatile__ (SYSCALLDB : "=a"(ret) : "a"(n), "D"(a1) : "rcx", "r11", "memory");
+ 	return ret;
+ }
+ 
+ static __inline long __syscall2(long n, long a1, long a2)
+ {
+ 	unsigned long ret;
+-	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2)
++	__asm__ __volatile__ (SYSCALLDB : "=a"(ret) : "a"(n), "D"(a1), "S"(a2)
+ 						  : "rcx", "r11", "memory");
+ 	return ret;
+ }
+@@ -26,7 +28,7 @@ static __inline long __syscall2(long n, long a1, long a2)
+ static __inline long __syscall3(long n, long a1, long a2, long a3)
+ {
+ 	unsigned long ret;
+-	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
++	__asm__ __volatile__ (SYSCALLDB : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+ 						  "d"(a3) : "rcx", "r11", "memory");
+ 	return ret;
+ }
+@@ -35,7 +37,7 @@ static __inline long __syscall4(long n, long a1, long a2, long a3, long a4)
+ {
+ 	unsigned long ret;
+ 	register long r10 __asm__("r10") = a4;
+-	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
++	__asm__ __volatile__ (SYSCALLDB : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+ 						  "d"(a3), "r"(r10): "rcx", "r11", "memory");
+ 	return ret;
+ }
+@@ -45,7 +47,7 @@ static __inline long __syscall5(long n, long a1, long a2, long a3, long a4, long
+ 	unsigned long ret;
+ 	register long r10 __asm__("r10") = a4;
+ 	register long r8 __asm__("r8") = a5;
+-	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
++	__asm__ __volatile__ (SYSCALLDB : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+ 						  "d"(a3), "r"(r10), "r"(r8) : "rcx", "r11", "memory");
+ 	return ret;
+ }
+@@ -56,7 +58,7 @@ static __inline long __syscall6(long n, long a1, long a2, long a3, long a4, long
+ 	register long r10 __asm__("r10") = a4;
+ 	register long r8 __asm__("r8") = a5;
+ 	register long r9 __asm__("r9") = a6;
+-	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
++	__asm__ __volatile__ (SYSCALLDB : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+ 						  "d"(a3), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
+ 	return ret;
+ }
+diff --git a/arch/x86_64/syscalldb.h b/arch/x86_64/syscalldb.h
+index e69de29..733eb7f 100644
+--- a/arch/x86_64/syscalldb.h
++++ b/arch/x86_64/syscalldb.h
+@@ -0,0 +1,24 @@
++#ifndef _SYSCALLDB_H_
++#define _SYSCALLDB_H_
++
++#ifndef __ASSEMBLER__
++
++#define SYSCALLDB							      \
++	"subq $128, %%rsp\n\t"						      \
++	"pushq %%rbx\n\t"						      \
++	"movq syscalldb@GOTPCREL(%%rip), %%rbx\n\t"			      \
++	"callq *%%rbx\n\t"						      \
++	"popq %%rbx\n\t"						      \
++	"addq $128, %%rsp\n\t"
++
++#define SYSCALLDB_ASM							      \
++	"movq syscalldb@GOTPCREL(%rip), %rbx\n\t"			      \
++	"callq *%rbx\n\t"
++
++int register_library (const char * name, unsigned long load_address);
++
++long int glibc_option (const char * opt);
++
++#endif /* Assembler */
++
++#endif /* _SYSCALLDB_H */
+diff --git a/configure b/configure
+index 539c9fc..9bc739d 100755
+--- a/configure
++++ b/configure
+@@ -582,7 +582,7 @@ tryldflag LDFLAGS_AUTO -Wl,--hash-style=both
+ # libc.so will crash at runtime during relocation processing.
+ # The common way this can happen is failure to link the compiler
+ # runtime library; implementation error is also a possibility.
+-tryldflag LDFLAGS_AUTO -Wl,--no-undefined
++tryldflag LDFLAGS_AUTO -Wl,--shlib-allow-undefined
+ 
+ # Avoid exporting symbols from compiler runtime libraries. They
+ # should be hidden anyway, but some toolchains including old gcc
+diff --git a/ldso/dynlink.c b/ldso/dynlink.c
+index 35a90ae..6987bf9 100644
+--- a/ldso/dynlink.c
++++ b/ldso/dynlink.c
+@@ -20,6 +20,7 @@
+ #include "pthread_impl.h"
+ #include "libc.h"
+ #include "dynlink.h"
++#include <glibc-version.h>
+ 
+ static void error(const char *, ...);
+ 
+@@ -132,6 +133,7 @@ static struct fdpic_dummy_loadmap app_dummy_loadmap;
+ static struct dso *const nodeps_dummy;
+ 
+ struct debug *_dl_debug_addr = &debug;
++weak_alias(debug, __libc_r_debug);
+ 
+ __attribute__((__visibility__("hidden")))
+ void (*const __init_array_start)(void)=0, (*const __fini_array_start)(void)=0;
+@@ -725,6 +727,8 @@ done_mapping:
+ 	dso->base = base;
+ 	dso->dynv = laddr(dso, dyn);
+ 	if (dso->tls.size) dso->tls.image = laddr(dso, tls_image);
++	/* register the library to Graphene */
++	register_library(dso->name, dso->base);
+ 	if (!runtime) reclaim_gaps(dso);
+ 	free(allocated_buf);
+ 	return map;
+@@ -1293,7 +1297,7 @@ static void dl_debug_state(void)
+ {
+ }
+ 
+-weak_alias(dl_debug_state, _dl_debug_state);
++weak_alias(dl_debug_state, __libc_debug_state);
+ 
+ void __init_tls(size_t *auxv)
+ {
+@@ -1418,6 +1422,9 @@ void __dls2(unsigned char *base, size_t *sp)
+ 
+ 	ldso.relocated = 0;
+ 
++	/* register the ldso to Graphene */
++	register_library(ldso.name, ldso.base);
++
+ 	/* Call dynamic linker stage-3, __dls3, looking it up
+ 	 * symbolically as a barrier against moving the address
+ 	 * load across the above relocation processing. */
+@@ -1680,7 +1687,7 @@ _Noreturn void __dls3(size_t *sp)
+ 	debug.head = head;
+ 	debug.base = ldso.base;
+ 	debug.state = 0;
+-	_dl_debug_state();
++	__libc_debug_state();
+ 
+ 	if (replace_argv0) argv[0] = replace_argv0;
+ 
+@@ -1811,7 +1818,7 @@ void *dlopen(const char *file, int mode)
+ 	redo_lazy_relocs();
+ 
+ 	update_tls_size();
+-	_dl_debug_state();
++	__libc_debug_state();
+ 	orig_tail = tail;
+ end:
+ 	__release_ptc();
+diff --git a/src/internal/pthread_impl.h b/src/internal/pthread_impl.h
+index 56e1934..0547829 100644
+--- a/src/internal/pthread_impl.h
++++ b/src/internal/pthread_impl.h
+@@ -9,6 +9,7 @@
+ #include "syscall.h"
+ #include "atomic.h"
+ #include "futex.h"
++#include <shim_tls.h>
+ 
+ #define pthread __pthread
+ 
+@@ -17,6 +18,8 @@ struct pthread {
+ 	void **dtv, *unused1, *unused2;
+ 	uintptr_t sysinfo;
+ 	uintptr_t canary, canary2;
++	/* For graphene, we reserve shim tcb in the libc tcb */
++	shim_tcb_t shim_tcb;
+ 	pid_t tid, pid;
+ 	int tsd_used, errno_val;
+ 	volatile int cancel, canceldisable, cancelasync;
+diff --git a/src/internal/vis.h b/src/internal/vis.h
+index 35855fc..95224d1 100644
+--- a/src/internal/vis.h
++++ b/src/internal/vis.h
+@@ -22,6 +22,4 @@ extern long timezone, __timezone;
+ __attribute__((__visibility__("default")))
+ extern char *optarg, **environ, **__environ, *tzname[2], *__tzname[2], *__progname, *__progname_full;
+ 
+-#pragma GCC visibility push(protected)
+-
+ #endif
+diff --git a/src/internal/x86_64/syscall.s b/src/internal/x86_64/syscall.s
+index c4bee80..423681c 100644
+--- a/src/internal/x86_64/syscall.s
++++ b/src/internal/x86_64/syscall.s
+@@ -9,5 +9,8 @@ __syscall:
+ 	movq %r8,%r10
+ 	movq %r9,%r8
+ 	movq 8(%rsp),%r9
+-	syscall
++	pushq %rbx
++	movq syscalldb@GOTPCREL(%rip), %rbx
++	call *%rbx
++	popq %rbx
+ 	ret
+diff --git a/src/process/x86_64/vfork.s b/src/process/x86_64/vfork.s
+index 27af46f..8a6234d 100644
+--- a/src/process/x86_64/vfork.s
++++ b/src/process/x86_64/vfork.s
+@@ -6,7 +6,10 @@ __vfork:
+ vfork:
+ 	pop %rdx
+ 	mov $58,%eax
+-	syscall
++	pushq %rbx
++	movq syscalldb@GOTPCREL(%rip), %rbx
++	call *%rbx
++	popq %rbx
+ 	push %rdx
+ 	mov %rax,%rdi
+ 	jmp __syscall_ret
+diff --git a/src/signal/x86_64/restore.s b/src/signal/x86_64/restore.s
+index b5c6e37..528e190 100644
+--- a/src/signal/x86_64/restore.s
++++ b/src/signal/x86_64/restore.s
+@@ -3,5 +3,6 @@
+ .type __restore_rt,@function
+ __restore_rt:
+ 	mov $15, %rax
+-	syscall
++	movq syscalldb@GOTPCREL(%rip), %rbx
++	call *%rbx
+ .size __restore_rt,.-__restore_rt
+diff --git a/src/thread/x86_64/__set_thread_area.s b/src/thread/x86_64/__set_thread_area.s
+index f3ff4f6..500d4dd 100644
+--- a/src/thread/x86_64/__set_thread_area.s
++++ b/src/thread/x86_64/__set_thread_area.s
+@@ -6,5 +6,8 @@ __set_thread_area:
+ 	mov %rdi,%rsi           /* shift for syscall */
+ 	movl $0x1002,%edi       /* SET_FS register */
+ 	movl $158,%eax          /* set fs segment to */
+-	syscall                 /* arch_prctl(SET_FS, arg)*/
++	pushq %rbx
++	movq syscalldb@GOTPCREL(%rip), %rbx
++	call *%rbx
++	popq %rbx
+ 	ret
+diff --git a/src/thread/x86_64/__unmapself.s b/src/thread/x86_64/__unmapself.s
+index e2689e6..f4d766d 100644
+--- a/src/thread/x86_64/__unmapself.s
++++ b/src/thread/x86_64/__unmapself.s
+@@ -4,7 +4,11 @@
+ .type   __unmapself,@function
+ __unmapself:
+ 	movl $11,%eax   /* SYS_munmap */
+-	syscall         /* munmap(arg2,arg3) */
++	pushq %rbx
++	movq syscalldb@GOTPCREL(%rip), %rbx
++	call *%rbx
++	popq %rbx
+ 	xor %rdi,%rdi   /* exit() args: always return success */
+ 	movl $60,%eax   /* SYS_exit */
+-	syscall         /* exit(0) */
++	movq syscalldb@GOTPCREL(%rip), %rbx
++	call *%rbx
+diff --git a/src/thread/x86_64/clone.s b/src/thread/x86_64/clone.s
+index ee59903..c593b5f 100644
+--- a/src/thread/x86_64/clone.s
++++ b/src/thread/x86_64/clone.s
+@@ -13,7 +13,10 @@ __clone:
+ 	and $-16,%rsi
+ 	sub $8,%rsi
+ 	mov %rcx,(%rsi)
+-	syscall
++	pushq %rbx
++	movq syscalldb@GOTPCREL(%rip), %rbx
++	call *%rbx
++	popq %rbx
+ 	test %eax,%eax
+ 	jnz 1f
+ 	xor %ebp,%ebp
+@@ -22,6 +25,7 @@ __clone:
+ 	mov %eax,%edi
+ 	xor %eax,%eax
+ 	mov $60,%al
+-	syscall
++	movq syscalldb@GOTPCREL(%rip), %rbx
++	call *%rbx
+ 	hlt
+ 1:	ret
+diff --git a/src/thread/x86_64/syscall_cp.s b/src/thread/x86_64/syscall_cp.s
+index 4f10171..1ba1aba 100644
+--- a/src/thread/x86_64/syscall_cp.s
++++ b/src/thread/x86_64/syscall_cp.s
+@@ -24,7 +24,10 @@ __cp_begin:
+ 	mov 8(%rsp),%r8
+ 	mov 16(%rsp),%r9
+ 	mov %r11,8(%rsp)
+-	syscall
++	pushq %rbx
++	movq syscalldb@GOTPCREL(%rip), %rbx
++	call *%rbx
++	popq %rbx
+ __cp_end:
+ 	ret
+ __cp_cancel:
