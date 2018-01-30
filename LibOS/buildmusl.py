@@ -27,6 +27,7 @@ musl = "musl-1.1.16"
 muslParent = "" # musl parent directory
 muslDir = ""    # musl dir (ex. musl-2.19)
 buildDir = "musl-build"
+linkDir = os.path.abspath("musl-link") + '/'
 installDir = os.path.dirname(home) + '/Runtime/'
 commandStr = ""
 commandOutput = ""
@@ -102,10 +103,10 @@ if True:
 
     cflags = '{0} -O2 -U_FORTIFY_SOURCE -fno-stack-protector'.format(debug_flags)
     extra_defs = ''
-    extra_flags = '--enable-shared --disable-static'
+    extra_flags = '--enable-shared --enable-static'
 
     ##    configure
-    commandStr = r'CFLAGS="{2}" {3} {0}/configure --prefix={1} {4} | tee configure.out'.format(musl, installDir, cflags, extra_defs, extra_flags)
+    commandStr = r'CFLAGS="{2}" {3} {0}/configure --prefix={1} {4} | tee configure.out'.format(musl, linkDir, cflags, extra_defs, extra_flags)
     print commandStr
     commandOutput = subprocess.call(commandStr, shell=True)
 

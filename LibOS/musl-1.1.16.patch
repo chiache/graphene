@@ -1,6 +1,6 @@
 diff -ruNp musl-1.1.16/arch/x86_64/syscall_arch.h musl-1.1.16.new/arch/x86_64/syscall_arch.h
 --- musl-1.1.16/arch/x86_64/syscall_arch.h	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/arch/x86_64/syscall_arch.h	2018-01-30 12:59:01.093686274 -0800
++++ musl-1.1.16.new/arch/x86_64/syscall_arch.h	2018-01-30 15:40:59.805375694 -0800
 @@ -1,24 +1,26 @@
  #define __SYSCALL_LL_E(x) (x)
  #define __SYSCALL_LL_O(x) (x)
@@ -69,7 +69,7 @@ diff -ruNp musl-1.1.16/arch/x86_64/syscall_arch.h musl-1.1.16.new/arch/x86_64/sy
  }
 diff -ruNp musl-1.1.16/arch/x86_64/syscalldb.h musl-1.1.16.new/arch/x86_64/syscalldb.h
 --- musl-1.1.16/arch/x86_64/syscalldb.h	1969-12-31 16:00:00.000000000 -0800
-+++ musl-1.1.16.new/arch/x86_64/syscalldb.h	2018-01-30 12:59:01.093686274 -0800
++++ musl-1.1.16.new/arch/x86_64/syscalldb.h	2018-01-30 15:40:59.805375694 -0800
 @@ -0,0 +1,24 @@
 +#ifndef _SYSCALLDB_H_
 +#define _SYSCALLDB_H_
@@ -97,7 +97,7 @@ diff -ruNp musl-1.1.16/arch/x86_64/syscalldb.h musl-1.1.16.new/arch/x86_64/sysca
 +#endif /* _SYSCALLDB_H */
 diff -ruNp musl-1.1.16/configure musl-1.1.16.new/configure
 --- musl-1.1.16/configure	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/configure	2018-01-30 12:59:01.093686274 -0800
++++ musl-1.1.16.new/configure	2018-01-30 15:40:59.809375664 -0800
 @@ -574,7 +574,7 @@ tryldflag LDFLAGS_AUTO -Wl,--hash-style=
  # libc.so will crash at runtime during relocation processing.
  # The common way this can happen is failure to link the compiler
@@ -109,7 +109,7 @@ diff -ruNp musl-1.1.16/configure musl-1.1.16.new/configure
  # should be hidden anyway, but some toolchains including old gcc
 diff -ruNp musl-1.1.16/ldso/dynlink.c musl-1.1.16.new/ldso/dynlink.c
 --- musl-1.1.16/ldso/dynlink.c	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/ldso/dynlink.c	2018-01-30 13:01:16.428618369 -0800
++++ musl-1.1.16.new/ldso/dynlink.c	2018-01-30 15:40:59.809375664 -0800
 @@ -20,6 +20,7 @@
  #include "pthread_impl.h"
  #include "libc.h"
@@ -184,7 +184,7 @@ diff -ruNp musl-1.1.16/ldso/dynlink.c musl-1.1.16.new/ldso/dynlink.c
  	__release_ptc();
 diff -ruNp musl-1.1.16/Makefile musl-1.1.16.new/Makefile
 --- musl-1.1.16/Makefile	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/Makefile	2018-01-30 12:59:01.093686274 -0800
++++ musl-1.1.16.new/Makefile	2018-01-30 15:40:59.809375664 -0800
 @@ -46,7 +46,7 @@ CFLAGS_AUTO = -Os -pipe
  CFLAGS_C99FSE = -std=c99 -ffreestanding -nostdinc 
  
@@ -196,7 +196,7 @@ diff -ruNp musl-1.1.16/Makefile musl-1.1.16.new/Makefile
  LDFLAGS_ALL = $(LDFLAGS_AUTO) $(LDFLAGS)
 diff -ruNp musl-1.1.16/src/internal/pthread_impl.h musl-1.1.16.new/src/internal/pthread_impl.h
 --- musl-1.1.16/src/internal/pthread_impl.h	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/src/internal/pthread_impl.h	2018-01-30 12:59:01.097686242 -0800
++++ musl-1.1.16.new/src/internal/pthread_impl.h	2018-01-30 15:40:59.809375664 -0800
 @@ -9,6 +9,7 @@
  #include "syscall.h"
  #include "atomic.h"
@@ -219,7 +219,7 @@ diff -ruNp musl-1.1.16/src/internal/pthread_impl.h musl-1.1.16.new/src/internal/
  	volatile int cancel, canceldisable, cancelasync;
 diff -ruNp musl-1.1.16/src/internal/vis.h musl-1.1.16.new/src/internal/vis.h
 --- musl-1.1.16/src/internal/vis.h	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/src/internal/vis.h	2018-01-30 12:59:01.097686242 -0800
++++ musl-1.1.16.new/src/internal/vis.h	2018-01-30 15:40:59.809375664 -0800
 @@ -22,6 +22,4 @@ extern long timezone, __timezone;
  __attribute__((__visibility__("default")))
  extern char *optarg, **environ, **__environ, *tzname[2], *__tzname[2], *__progname, *__progname_full;
@@ -229,7 +229,7 @@ diff -ruNp musl-1.1.16/src/internal/vis.h musl-1.1.16.new/src/internal/vis.h
  #endif
 diff -ruNp musl-1.1.16/src/internal/x86_64/syscall.s musl-1.1.16.new/src/internal/x86_64/syscall.s
 --- musl-1.1.16/src/internal/x86_64/syscall.s	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/src/internal/x86_64/syscall.s	2018-01-30 12:59:01.097686242 -0800
++++ musl-1.1.16.new/src/internal/x86_64/syscall.s	2018-01-30 15:40:59.809375664 -0800
 @@ -9,5 +9,8 @@ __syscall:
  	movq %r8,%r10
  	movq %r9,%r8
@@ -242,7 +242,7 @@ diff -ruNp musl-1.1.16/src/internal/x86_64/syscall.s musl-1.1.16.new/src/interna
  	ret
 diff -ruNp musl-1.1.16/src/process/x86_64/vfork.s musl-1.1.16.new/src/process/x86_64/vfork.s
 --- musl-1.1.16/src/process/x86_64/vfork.s	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/src/process/x86_64/vfork.s	2018-01-30 12:59:01.097686242 -0800
++++ musl-1.1.16.new/src/process/x86_64/vfork.s	2018-01-30 15:40:59.809375664 -0800
 @@ -6,7 +6,10 @@ __vfork:
  vfork:
  	pop %rdx
@@ -257,7 +257,7 @@ diff -ruNp musl-1.1.16/src/process/x86_64/vfork.s musl-1.1.16.new/src/process/x8
  	jmp __syscall_ret
 diff -ruNp musl-1.1.16/src/signal/x86_64/restore.s musl-1.1.16.new/src/signal/x86_64/restore.s
 --- musl-1.1.16/src/signal/x86_64/restore.s	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/src/signal/x86_64/restore.s	2018-01-30 12:59:01.097686242 -0800
++++ musl-1.1.16.new/src/signal/x86_64/restore.s	2018-01-30 15:40:59.809375664 -0800
 @@ -3,5 +3,6 @@
  .type __restore_rt,@function
  __restore_rt:
@@ -268,7 +268,7 @@ diff -ruNp musl-1.1.16/src/signal/x86_64/restore.s musl-1.1.16.new/src/signal/x8
  .size __restore_rt,.-__restore_rt
 diff -ruNp musl-1.1.16/src/thread/x86_64/clone.s musl-1.1.16.new/src/thread/x86_64/clone.s
 --- musl-1.1.16/src/thread/x86_64/clone.s	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/src/thread/x86_64/clone.s	2018-01-30 12:59:01.097686242 -0800
++++ musl-1.1.16.new/src/thread/x86_64/clone.s	2018-01-30 15:40:59.809375664 -0800
 @@ -13,7 +13,10 @@ __clone:
  	and $-16,%rsi
  	sub $8,%rsi
@@ -292,7 +292,7 @@ diff -ruNp musl-1.1.16/src/thread/x86_64/clone.s musl-1.1.16.new/src/thread/x86_
  1:	ret
 diff -ruNp musl-1.1.16/src/thread/x86_64/__set_thread_area.s musl-1.1.16.new/src/thread/x86_64/__set_thread_area.s
 --- musl-1.1.16/src/thread/x86_64/__set_thread_area.s	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/src/thread/x86_64/__set_thread_area.s	2018-01-30 12:59:01.097686242 -0800
++++ musl-1.1.16.new/src/thread/x86_64/__set_thread_area.s	2018-01-30 15:40:59.809375664 -0800
 @@ -6,5 +6,8 @@ __set_thread_area:
  	mov %rdi,%rsi           /* shift for syscall */
  	movl $0x1002,%edi       /* SET_FS register */
@@ -305,7 +305,7 @@ diff -ruNp musl-1.1.16/src/thread/x86_64/__set_thread_area.s musl-1.1.16.new/src
  	ret
 diff -ruNp musl-1.1.16/src/thread/x86_64/syscall_cp.s musl-1.1.16.new/src/thread/x86_64/syscall_cp.s
 --- musl-1.1.16/src/thread/x86_64/syscall_cp.s	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/src/thread/x86_64/syscall_cp.s	2018-01-30 12:59:01.097686242 -0800
++++ musl-1.1.16.new/src/thread/x86_64/syscall_cp.s	2018-01-30 15:40:59.809375664 -0800
 @@ -24,7 +24,10 @@ __cp_begin:
  	mov 8(%rsp),%r8
  	mov 16(%rsp),%r9
@@ -320,7 +320,7 @@ diff -ruNp musl-1.1.16/src/thread/x86_64/syscall_cp.s musl-1.1.16.new/src/thread
  __cp_cancel:
 diff -ruNp musl-1.1.16/src/thread/x86_64/__unmapself.s musl-1.1.16.new/src/thread/x86_64/__unmapself.s
 --- musl-1.1.16/src/thread/x86_64/__unmapself.s	2016-12-31 19:27:17.000000000 -0800
-+++ musl-1.1.16.new/src/thread/x86_64/__unmapself.s	2018-01-30 12:59:01.097686242 -0800
++++ musl-1.1.16.new/src/thread/x86_64/__unmapself.s	2018-01-30 15:40:59.809375664 -0800
 @@ -4,7 +4,11 @@
  .type   __unmapself,@function
  __unmapself:
@@ -335,3 +335,15 @@ diff -ruNp musl-1.1.16/src/thread/x86_64/__unmapself.s musl-1.1.16.new/src/threa
 -	syscall         /* exit(0) */
 +	movq syscalldb@GOTPCREL(%rip), %rbx
 +	call *%rbx
+diff -ruNp musl-1.1.16/tools/musl-gcc.specs.sh musl-1.1.16.new/tools/musl-gcc.specs.sh
+--- musl-1.1.16/tools/musl-gcc.specs.sh	2016-12-31 19:27:17.000000000 -0800
++++ musl-1.1.16.new/tools/musl-gcc.specs.sh	2018-01-30 15:40:07.433764944 -0800
+@@ -23,7 +23,7 @@ libgcc.a%s %:if-exists(libgcc_eh.a%s)
+ %{shared|pie:crtendS.o%s;:crtend.o%s} $libdir/crtn.o
+ 
+ *link:
+--dynamic-linker $ldso -nostdlib %{shared:-shared} %{static:-static} %{rdynamic:-export-dynamic}
++-L$libdir/../../../Runtime -lpal -lsysdb -dynamic-linker $ldso -nostdlib %{shared:-shared} %{static:-static} %{rdynamic:-export-dynamic}
+ 
+ *esp_link:
+ 

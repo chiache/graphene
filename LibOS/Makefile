@@ -45,6 +45,7 @@ MUSL_BUILD_DIR = musl-build
 
 musl: $(MUSL_BUILD_DIR)/Makefile
 	cd $(MUSL_BUILD_DIR) && (($(MAKE) >> build.log) 2>&1 | tee -a build.log)
+	cd $(MUSL_BUILD_DIR) && (($(MAKE) install >> build.log) 2>&1 | tee -a build.log)
 
 $(MUSL_BUILD_DIR)/Makefile: $(MUSL_SRC)/configure
 ifeq ($(DEBUG),1)
