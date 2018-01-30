@@ -2,10 +2,10 @@
 #include <stdarg.h>
 #include <errno.h>
 
-int register_library (const char * name, unsigned long load_address)
+int register_library (const char * name, void * load_address)
 	__attribute__((weak));
 
-int register_library (const char * name, unsigned long load_address)
+int register_library (const char * name, void * load_address)
 {
 	return 0;
 }

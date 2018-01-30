@@ -1539,7 +1539,7 @@ int init_brk_from_executable (struct shim_handle * exec)
     return 0;
 }
 
-int register_library (const char * name, unsigned long load_address)
+int register_library (const char * name, void * load_address)
 {
     debug("glibc register library %s loaded at %p\n",
           name, load_address);

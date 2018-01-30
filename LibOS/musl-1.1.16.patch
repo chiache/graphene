@@ -103,7 +103,7 @@ index e69de29..733eb7f 100644
 +	"movq syscalldb@GOTPCREL(%rip), %rbx\n\t"			      \
 +	"callq *%rbx\n\t"
 +
-+int register_library (const char * name, unsigned long load_address);
++int register_library (const char * name, void * load_address);
 +
 +long int glibc_option (const char * opt);
 +
@@ -148,7 +148,7 @@ index 35a90ae..6987bf9 100644
  	dso->dynv = laddr(dso, dyn);
  	if (dso->tls.size) dso->tls.image = laddr(dso, tls_image);
 +	/* register the library to Graphene */
-+	register_library(dso->name, dso->base);
++	register_library(dso->name, (void *) dso->base);
  	if (!runtime) reclaim_gaps(dso);
  	free(allocated_buf);
  	return map;
@@ -166,7 +166,7 @@ index 35a90ae..6987bf9 100644
  	ldso.relocated = 0;
  
 +	/* register the ldso to Graphene */
-+	register_library(ldso.name, ldso.base);
++	register_library(ldso.name, (void *) ldso.base);
 +
  	/* Call dynamic linker stage-3, __dls3, looking it up
  	 * symbolically as a barrier against moving the address
