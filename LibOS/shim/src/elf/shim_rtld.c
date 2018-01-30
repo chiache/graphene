@@ -1575,7 +1575,7 @@ int execute_elf_object (struct shim_handle * exec, int argc, const char ** argp,
     getrand(random_bytes, AUXV_RANDOM_SIZE);
 
     /* check if there are enough axiliary vectors */
-    assert(8 <= nauxv);
+    assert(12 <= nauxv);
     auxp[0].a_type = AT_PHDR;
     auxp[0].a_un.a_val = (__typeof(auxp[0].a_un.a_val)) exec_map->l_phdr;
     auxp[1].a_type = AT_PHNUM;
@@ -1588,9 +1588,17 @@ int execute_elf_object (struct shim_handle * exec, int argc, const char ** argp,
     auxp[4].a_un.a_val = exec_map->l_entry;
     auxp[5].a_type = AT_BASE;
     auxp[5].a_un.a_val = interp_map ? interp_map->l_addr : 0;
-    auxp[6].a_type = AT_RANDOM;
-    auxp[6].a_un.a_val = (uint64_t) random_bytes;
-    auxp[7].a_type = AT_NULL;
+    auxp[6].a_type = AT_UID;
+    auxp[6].a_un.a_val = 0;
+    auxp[7].a_type = AT_EUID;
+    auxp[7].a_un.a_val = 0;
+    auxp[8].a_type = AT_GID;
+    auxp[8].a_un.a_val = 0;
+    auxp[9].a_type = AT_EGID;
+    auxp[9].a_un.a_val = 0;
+    auxp[10].a_type = AT_RANDOM;
+    auxp[10].a_un.a_val = (uint64_t) random_bytes;
+    auxp[11].a_type = AT_NULL;
 
     ElfW(Addr) entry = interp_map ? interp_map->l_entry : exec_map->l_entry;
 
