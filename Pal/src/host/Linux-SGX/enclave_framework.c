@@ -486,14 +486,42 @@ int init_trusted_files (void)
             k += len + 1;
             len = get_config(store, key, uri, CONFIG_MAX);
             if (len > 0) {
-                ret = init_trusted_file(key + 18, uri);
+                ret = init_trusted_file(tmp, uri);
+                if (ret < 0)
+                    return ret;
+            }
+        }
+    }
+
+no_trusted:
+
+    cfgsize = get_config_entries_size(store, "sgx.trusted_libs");
+    if (cfgsize <= 0)
+        goto no_trusted_libs;
+
+    cfgbuf = __alloca(cfgsize);
+    nuris = get_config_entries(pal_state.root_config, "sgx.trusted_libs",
+                               cfgbuf, cfgsize);
+    if (nuris) {
+        char key[CONFIG_MAX], uri[CONFIG_MAX];
+        char * k = cfgbuf, * tmp;
+
+        tmp = strcpy_static(key, "sgx.trusted_libs.", CONFIG_MAX);
+
+        for (int i = 0 ; i < nuris ; i++) {
+            len = strlen(k);
+            memcpy(tmp, k, len + 1);
+            k += len + 1;
+            len = get_config(pal_state.root_config, key, uri, CONFIG_MAX);
+            if (len > 0) {
+                ret = init_trusted_file(tmp, uri);
                 if (ret < 0)
                     goto out;
             }
         }
     }
 
-no_trusted:
+no_trusted_libs:
 
     cfgsize = get_config_entries_size(store, "sgx.allowed_files");
     if (cfgsize <= 0)
