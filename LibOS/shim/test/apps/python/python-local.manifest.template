@@ -1,0 +1,40 @@
+#!$(PAL)
+
+loader.preload = file:$(SHIMPATH)
+loader.exec = file:$(PYTHONDIR)/bin/python
+loader.execname = python
+loader.env.LD_LIBRARY_PATH = /graphene:/graphene/resolv:/host:/python/lib
+loader.env.PATH = /python/bin
+loader.env.USERNAME =
+loader.env.HOME =
+loader.env.PWD =
+loader.debug_type = none
+
+fs.mount.lib1.type = chroot
+fs.mount.lib1.path = /graphene
+fs.mount.lib1.uri = file:$(LIBCDIR)
+
+fs.mount.lib2.type = chroot
+fs.mount.lib2.path = /host
+fs.mount.lib2.uri = file:/lib/x86_64-linux-gnu
+
+fs.mount.python.type = chroot
+fs.mount.python.path = /python
+fs.mount.python.uri = file:$(PYTHONDIR)
+
+fs.mount.etc.type = chroot
+fs.mount.etc.path = /etc
+fs.mount.etc.uri = file:
+
+sys.stack.size = 256K
+sys.brk.size = 4M
+glibc.heap_size = 16M
+
+sgx.search_trusted_libs = file:$(LIBCDIR),file:/lib/x86_64-linux-gnu
+
+sgx.trusted_files.hosts = file:hosts
+sgx.trusted_files.resolv = file:resolv.conf
+sgx.trusted_files.gai = file:gai.conf
+
+sgx.allowed_files.python = file:$(PYTHONDIR)/lib/python2.7
+sgx.allowed_files.scripts = file:scripts
