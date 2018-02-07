@@ -39,7 +39,7 @@ fs.mount.oldpath.type = chroot
 fs.mount.oldpath.path = /tensorflow/lib/python2.7/orig-prefix.txt
 fs.mount.oldpath.uri = file:orig-prefix.txt
 
-sys.stack.size = 256K
+sys.stack.size = 1M
 sys.brk.size = 4M
 glibc.heap_size = 16M
 
