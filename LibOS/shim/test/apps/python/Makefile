@@ -6,7 +6,7 @@ PYTHON_INSTALL = python-install
 manifests = python.manifest
 
 ifeq ($(LOCAL),1)
-target = $(PYTHON_INSTALL)/bin/python
+target = $(addprefix $(PYTHON_INSTALL)/bin/,python easy_install virtualenv)
 manifests += python-local.manifest
 extra_rules = -e 's:\$$(PYTHONDIR):$(PYTHON_INSTALL):g'
 endif
@@ -23,6 +23,12 @@ ifeq ($(LOCAL),1)
 $(PYTHON_INSTALL)/bin/python: $(PYTHON_SRC)/Makefile
 	cd $(PYTHON_SRC) && $(MAKE)
 	cd $(PYTHON_SRC) && $(MAKE) install
+
+$(PYTHON_INSTALL)/bin/easy_install: $(PYTHON_INSTALL)/bin/python
+	$(PYTHON_INSTALL)/bin/python ez_setup.py
+
+$(PYTHON_INSTALL)/bin/virtualenv: $(PYTHON_INSTALL)/bin/easy_install
+	$(PYTHON_INSTALL)/bin/easy_install -i https://pypi.python.org/simple/ virtualenv
 
 $(PYTHON_SRC)/Makefile: $(PYTHON_SRC)/configure
 	cd $(PYTHON_SRC) && \
