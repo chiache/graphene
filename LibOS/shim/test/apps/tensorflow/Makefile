@@ -6,7 +6,7 @@ PYTHON_SRC = Python-2.7.9
 PYTHON_INSTALL = python-install
 
 manifests = python.manifest
-target = install-tensorflow install-extra-packages
+target = install-tensorflow
 extra_rules = -e 's:\$$(TENSORFLOWDIR):$(TENSORFLOW_INSTALL):g' \
               -e 's:\$$(PYTHONDIR):$(PYTHON_INSTALL):g'
 
@@ -37,8 +37,10 @@ $(PYTHON_SRC)/configure: $(PYTHON_SRC).tgz
 $(TENSORFLOW_INSTALL)/bin/activate: $(PYTHON_INSTALL)/bin/virtualenv
 	$(PYTHON_INSTALL)/bin/virtualenv --system-site-packages $(TENSORFLOW_INSTALL)
 
-.PHONY: install-tensorflow
-install-tensorflow: $(TENSORFLOW_INSTALL)/bin/activate
+install-tensorflow: $(TENSORFLOW_INSTALL)/lib/python2.7/site-packages/tensorflow \
+	install-extra-packages
+
+$(TENSORFLOW_INSTALL)/lib/python2.7/site-packages/tensorflow: $(TENSORFLOW_INSTALL)/bin/activate
 	bash -c "source $(TENSORFLOW_INSTALL)/bin/activate; \
 		easy_install -U pip && \
 		pip install --upgrade $(TENSORFLOW_URL)"
