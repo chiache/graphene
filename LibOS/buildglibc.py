@@ -32,7 +32,8 @@ commandStr = ""
 commandOutput = ""
 quiet = False
 debug_flags = ""
-optimize_flags = "-O2"
+optimize_cflags = "-O2"
+optimize_ldflags = ""
 
 for arg in sys.argv[1:]:
     if arg == '--quiet' or arg == '-q':
@@ -40,7 +41,8 @@ for arg in sys.argv[1:]:
     if arg == '--debug':
         debug_flags = "-g"
     if arg == '--diet':
-        optimize_flags = "-Os"
+        optimize_cflags = "-Os"
+        optimize_ldflags = "-z max-page-size=0x1000"
 
 if True:
 
@@ -103,13 +105,14 @@ if True:
 
     os.chdir(buildDir)
 
-    cflags = '{0} {1} -U_FORTIFY_SOURCE -fno-stack-protector'.format(debug_flags, optimize_flags)
+    cflags = '{0} {1} -U_FORTIFY_SOURCE -fno-stack-protector'.format(debug_flags, optimize_cflags)
+    ldflags = '{0}'.format(optimize_ldflags)
     extra_defs = ''
     disabled_features = { 'nscd' }
     extra_flags = '--with-tls --enable-add-ons=nptl --without-selinux --disable-test {0}'.format(' '.join(['--disable-' + f for f in disabled_features]))
 
     ##    configure
-    commandStr = r'CFLAGS="{2}" {3} {0}/configure --prefix={1} {4} | tee configure.out'.format(glibc, installDir, cflags, extra_defs, extra_flags)
+    commandStr = r'CFLAGS="{2}" LDFLAGS="{3}" {4} {0}/configure --prefix={1} {5} | tee configure.out'.format(glibc, installDir, cflags, ldflags, extra_defs, extra_flags)
     print commandStr
     commandOutput = subprocess.call(commandStr, shell=True)
 

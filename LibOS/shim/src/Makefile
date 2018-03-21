@@ -37,7 +37,7 @@ ARFLAGS	=
 
 ifeq ($(DIET),1)
 CFLAGS += -ffunction-sections -fdata-sections
-LDFLAGS += -gc-sections
+LDFLAGS += -gc-sections -z max-page-size=0x1000
 endif
 
 files_to_build = libsysdb.a libsysdb.so libsysdb_debug.so
