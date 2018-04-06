@@ -8,7 +8,6 @@ fs.mount.lib.path = /lib
 fs.mount.lib.uri = file:$(LIBCDIR)
 
 # sgx-related
-sgx.trusted_files.ld = file:$(LIBCDIR)/ld-linux-x86-64.so.2
-sgx.trusted_files.libc = file:$(LIBCDIR)/libc.so.6
+sgx.search_trusted_libs = file:$(LIBCDIR),file:/lib/x86_64-linux-gnu
 
 sgx.allowed_files.testdir = file:testdir

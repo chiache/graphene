@@ -7,42 +7,40 @@ loader.env.LD_LIBRARY_PATH = /jre/lib/amd64:/jre/lib/amd64/jli:/graphene:/lib/x8
 loader.env.PATH = /jre/bin:/bin:/usr/bin
 loader.debug_type = $(DEBUGTYPE)
 
+fs.mount.graphene.type = chroot
+fs.mount.graphene.path = /graphene
+fs.mount.graphene.uri = file:$(LIBCDIR)
+
 fs.mount.lib1.type = chroot
-fs.mount.lib1.path = /graphene
-fs.mount.lib1.uri = file:$(LIBCDIR)
+fs.mount.lib1.path = /lib/x86_64-linux-gnu
+fs.mount.lib1.uri = file:/lib/x86_64-linux-gnu
 
 fs.mount.lib2.type = chroot
-fs.mount.lib2.path = /lib/x86_64-linux-gnu
-fs.mount.lib2.uri = file:/lib/x86_64-linux-gnu
+fs.mount.lib2.path = /usr/lib/x86_64-linux-gnu
+fs.mount.lib2.uri = file:/usr/lib/x86_64-linux-gnu
 
 fs.mount.jre.type = chroot
 fs.mount.jre.path = /jre
 fs.mount.jre.uri = file:$(JAVA_HOME)
 
-fs.mount.usr.type = chroot
-fs.mount.usr.path = /usr
-fs.mount.usr.uri = file:/usr
+sys.stack.size = 4M
+sys.brk.size = 64M
+glibc.heap_size = 16M
+sgx.enclave_size = 4G
+sgx.thread_num = 16
 
-fs.mount.tmp.type = chroot
-fs.mount.tmp.path = /tmp
-fs.mount.tmp.uri = file:/tmp
-
-$(RESOURCE_RULE)
-
-sgx.search_trusted_libs.libc = file:$(LIBCDIR)
-sgx.search_trusted_libs.java = file:$(JAVA_HOME)/lib/amd64
-sgx.search_trusted_libs.java_server = file:$(JAVA_HOME)/lib/amd64/server
+sgx.search_trusted_libs = file:$(LIBCDIR),file:$(JAVA_HOME)/lib/amd64,file:$(JAVA_HOME)/lib/amd64/server,file:$(JAVA_HOME)/lib/amd64/jli,/lib/x86_64-linux-gnu,file:/usr/lib/x86_64-linux-gnu
 
 sgx.trusted_libs.librt = file:$(LIBCDIR)/librt.so.1
+sgx.trusted_libs.libjvm = file:$(JAVA_HOME)/lib/amd64/server/libjvm.so
 sgx.trusted_libs.libjava = file:$(JAVA_HOME)/lib/amd64/libjava.so
 sgx.trusted_libs.libjli = file:$(JAVA_HOME)/lib/amd64/jli/libjli.so
-sgx.trusted_libs.libjvm = file:$(JAVA_HOME)/lib/amd64/server/libjvm.so
 sgx.trusted_libs.libzip = file:$(JAVA_HOME)/lib/amd64/libzip.so
 sgx.trusted_libs.libnet = file:$(JAVA_HOME)/lib/amd64/libnet.so
 sgx.trusted_libs.libnio = file:$(JAVA_HOME)/lib/amd64/libnio.so
-sgx.trusted_libs.libnssc = file:/lib/x86_64-linux-gnu/libnss_compat.so.2
-sgx.trusted_libs.libnssf = file:/lib/x86_64-linux-gnu/libnss_files.so.2
-sgx.trusted_libs.libnssn = file:/lib/x86_64-linux-gnu/libnss_nis.so.2
+sgx.trusted_libs.libverify = file:$(JAVA_HOME)/lib/amd64/libverify.so
+sgx.trusted_libs.libsunec = file:$(JAVA_HOME)/lib/amd64/libsunec.so
+sgx.trusted_libs.libnss = file:/lib/x86_64-linux-gnu/libnss_files.so.2
 
 sgx.trusted_files.jvmcfg = file:$(JAVA_HOME)/lib/amd64/jvm.cfg
 sgx.trusted_files.meta = file:$(JAVA_HOME)/lib/meta-index
@@ -53,6 +51,3 @@ sgx.trusted_files.resources = file:$(JAVA_HOME)/lib/resources.jar
 
 sgx.allowed_files.ext = file:$(JAVA_HOME)/lib/ext
 sgx.allowed_files.classes = file:classes
-sgx.allowed_files.tmp = file:/tmp
-sgx.allowed_files.xml_out = file:xml_out
-sgx.allowed_files.SPECjvm2008 = file:SPECjvm2008
