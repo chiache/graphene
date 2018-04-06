@@ -175,7 +175,7 @@ void * migrated_shim_addr;
 void * initial_stack;
 const char ** initial_envp __attribute_migratable;
 
-const char ** library_paths;
+char ** library_paths;
 
 LOCKTYPE __master_lock;
 bool lock_enabled;
@@ -248,15 +248,22 @@ void * allocate_stack (size_t size, size_t protect_size, bool user)
 
     /* preserve a non-readable, non-writeable page below the user
        stack to stop user program to clobber other vmas */
-    void * stack = user ?
-                   get_unmapped_vma(size + protect_size, STACK_FLAGS) :
-                   NULL;
+    void * stack = NULL;
+    int flags = STACK_FLAGS|(user ? 0 : VMA_INTERNAL);
 
-    if (user)
-        stack = (void *) DkVirtualMemoryAlloc(stack, size + protect_size,
-                                0, PAL_PROT_READ|PAL_PROT_WRITE);
-    else
+    if (user) {
+        stack = bkeep_unmapped_heap(size + protect_size, PROT_NONE,
+                                    flags, NULL, 0, "stack");
+
+        if (!stack)
+            return NULL;
+
+        stack = (void *)
+            DkVirtualMemoryAlloc(stack, size + protect_size,
+                                 0, PAL_PROT_NONE);
+    } else {
         stack = system_malloc(size + protect_size);
+    }
 
     if (!stack)
         return NULL;
@@ -264,22 +271,11 @@ void * allocate_stack (size_t size, size_t protect_size, bool user)
     ADD_PROFILE_OCCURENCE(alloc_stack, size + protect_size);
     INC_PROFILE_OCCURENCE(alloc_stack_count);
 
-    if (protect_size &&
-        !DkVirtualMemoryProtect(stack, protect_size, PAL_PROT_NONE))
-        return NULL;
-
     stack += protect_size;
+    DkVirtualMemoryProtect(stack, size, PAL_PROT_READ|PAL_PROT_WRITE);
 
-    if (user) {
-        if (bkeep_mmap(stack, size, PROT_READ|PROT_WRITE,
-                       STACK_FLAGS, NULL, 0, "stack") < 0)
-            return NULL;
-
-        if (protect_size &&
-            bkeep_mmap(stack - protect_size, protect_size, 0,
-                       STACK_FLAGS, NULL, 0, NULL) < 0)
-            return NULL;
-    }
+    if (bkeep_mprotect(stack, size, PROT_READ|PROT_WRITE, flags) < 0)
+        return NULL;
 
     debug("allocated stack at %p (size = %d)\n", stack, size);
     return stack;
@@ -392,39 +388,38 @@ int init_stack (const char ** argv, const char ** envp, const char *** argpp,
 int read_environs (const char ** envp)
 {
     for (const char ** e = envp ; *e ; e++) {
-        switch ((*e)[0]) {
-            case 'L': {
-                if (strpartcmp_static(*e, "LD_LIBRARY_PATH=")) {
-                    const char * s = *e + static_strlen("LD_LIBRARY_PATH=");
-                    int npaths = 0;
-                    for (const char * tmp = s ; *tmp ; tmp++)
-                        if (*tmp == ':')
-                            npaths++;
-                    const char ** paths = malloc(sizeof(const char *) *
-                                                 (npaths + 1));
-                    if (!paths)
-                        return -ENOMEM;
+        if (strpartcmp_static(*e, "LD_LIBRARY_PATH=")) {
+            const char * s = *e + static_strlen("LD_LIBRARY_PATH=");
+            size_t npaths = 2; // One for the first entry, one for the last
+                               // NULL.
+            for (const char * tmp = s ; *tmp ; tmp++)
+                if (*tmp == ':')
+                    npaths++;
+            char** paths = malloc(sizeof(const char *) *
+                                  npaths);
+            if (!paths)
+                return -ENOMEM;
 
-                    int cnt = 0;
-                    while (*s) {
-                        const char * next;
-                        for (next = s ; *next && *next != ':' ; next++);
-                        int len = next - s;
-                        char * str = malloc(len + 1);
-                        if (!str)
-                            return -ENOMEM;
-                        memcpy(str, s, len);
-                        str[len] = 0;
-                        paths[cnt++] = str;
-                        s = *next ? next + 1 : next;
-                    }
-
-                    paths[cnt] = NULL;
-                    library_paths = paths;
-                    break;
+            size_t cnt = 0;
+            while (*s) {
+                const char * next;
+                for (next = s ; *next && *next != ':' ; next++);
+                size_t len = next - s;
+                char * str = malloc(len + 1);
+                if (!str) {
+                    for (size_t i = 0; i < cnt; i++)
+                        free(paths[cnt]);
+                    return -ENOMEM;
                 }
-                break;
+                memcpy(str, s, len);
+                str[len] = 0;
+                paths[cnt++] = str;
+                s = *next ? next + 1 : next;
             }
+
+            paths[cnt] = NULL;
+            library_paths = paths;
+            return 0;
         }
     }
 
@@ -445,46 +440,68 @@ static void __free (void * mem)
 
 int init_manifest (PAL_HANDLE manifest_handle)
 {
+    int ret = 0;
     void * addr;
-    unsigned int size;
+    size_t size;
+    bool stream_unmap_on_fail = false;
+    bool bkeep_unmap_on_fail = false;
+    struct config_store* new_root_config = NULL;
 
     if (PAL_CB(manifest_preload.start)) {
         addr = PAL_CB(manifest_preload.start);
         size = PAL_CB(manifest_preload.end) - PAL_CB(manifest_preload.start);
     } else {
         PAL_STREAM_ATTR attr;
-        if (!DkStreamAttributesQuerybyHandle(manifest_handle, &attr))
-            return -PAL_ERRNO;
+        if (!DkStreamAttributesQuerybyHandle(manifest_handle, &attr)) {
+            ret = -PAL_ERRNO;
+            goto fail;
+        }
 
         size = attr.pending_size;
         addr = (void *) DkStreamMap(manifest_handle, NULL,
-                                  PAL_PROT_READ, 0,
-                                  ALIGN_UP(size));
-
-        if (!addr)
-            return -PAL_ERRNO;
+                                    PAL_PROT_READ, 0,
+                                    ALIGN_UP(size));
+        if (!addr) {
+            ret = -PAL_ERRNO;
+            goto fail;
+        }
+        stream_unmap_on_fail = true;
     }
 
-    bkeep_mmap(addr, ALIGN_UP(size), PROT_READ,
-               MAP_PRIVATE|MAP_ANONYMOUS|VMA_INTERNAL, NULL, 0,
-               "manifest");
+    if (bkeep_mmap(addr, ALIGN_UP(size), PROT_READ,
+                   MAP_PRIVATE|MAP_ANONYMOUS|VMA_INTERNAL, NULL, 0,
+                   "manifest") < 0) {
+        ret = -EINVAL;
+        goto fail;
+    }
+    bkeep_unmap_on_fail = true;
 
-    root_config = malloc(sizeof(struct config_store));
-    root_config->raw_data = addr;
-    root_config->raw_size = size;
-    root_config->malloc = __malloc;
-    root_config->free = __free;
+    new_root_config = malloc(sizeof(struct config_store));
+    if (!new_root_config) {
+        ret = -ENOMEM;
+        goto fail;
+    }
+    new_root_config->raw_data = addr;
+    new_root_config->raw_size = size;
+    new_root_config->malloc = __malloc;
+    new_root_config->free = __free;
 
     const char * errstring = "Unexpected error";
-    int ret = 0;
 
-    if ((ret = read_config(root_config, NULL, &errstring)) < 0) {
-        root_config = NULL;
+    if ((ret = read_config(new_root_config, NULL, &errstring)) < 0) {
         sys_printf("Unable to read manifest file: %s\n", errstring);
-        return ret;
+        goto fail;
     }
+    root_config = new_root_config;
 
     return 0;
+fail:
+    if (bkeep_unmap_on_fail)
+        bkeep_munmap(addr, ALIGN_UP(size), VMA_INTERNAL);
+    if (stream_unmap_on_fail)
+        DkStreamUnmap(addr, size);
+    free(new_root_config);
+    return ret;
 }
 
 #ifdef PROFILE
@@ -606,11 +623,10 @@ DEFINE_PROFILE_INTERVAL(pal_child_creation_time,        pal);
 
 DEFINE_PROFILE_CATAGORY(init, );
 DEFINE_PROFILE_INTERVAL(init_randgen,               init);
-DEFINE_PROFILE_INTERVAL(init_heap,                  init);
+DEFINE_PROFILE_INTERVAL(init_vma,                   init);
 DEFINE_PROFILE_INTERVAL(init_slab,                  init);
 DEFINE_PROFILE_INTERVAL(init_str_mgr,               init);
 DEFINE_PROFILE_INTERVAL(init_internal_map,          init);
-DEFINE_PROFILE_INTERVAL(init_vma,                   init);
 DEFINE_PROFILE_INTERVAL(init_fs,                    init);
 DEFINE_PROFILE_INTERVAL(init_dcache,                init);
 DEFINE_PROFILE_INTERVAL(init_handle,                init);
@@ -693,12 +709,11 @@ int shim_init (int argc, void * args, void ** return_stack)
 
     BEGIN_PROFILE_INTERVAL();
     RUN_INIT(init_randgen);
-    RUN_INIT(init_heap);
+    RUN_INIT(init_vma);
     RUN_INIT(init_slab);
     RUN_INIT(read_environs, envp);
     RUN_INIT(init_str_mgr);
     RUN_INIT(init_internal_map);
-    RUN_INIT(init_vma);
     RUN_INIT(init_fs);
     RUN_INIT(init_dcache);
     RUN_INIT(init_handle);
@@ -819,8 +834,7 @@ static int name_pipe (char * uri, size_t size, void * id)
 {
     IDTYPE pipeid;
     int len;
-    if (getrand(&pipeid, sizeof(IDTYPE)) < sizeof(IDTYPE))
-        return -EACCES;
+    getrand(&pipeid, sizeof(pipeid));
     debug("creating pipe: pipe.srv:%u\n", pipeid);
     if ((len = snprintf(uri, size, "pipe.srv:%u", pipeid)) == size)
         return -ERANGE;
@@ -869,8 +883,7 @@ static int name_path (char * path, size_t size, void * id)
     unsigned int suffix;
     int prefix_len = strlen(path);
     int len;
-    if (getrand(&suffix, sizeof(unsigned int)) < sizeof(unsigned int))
-        return -EACCES;
+    getrand(&suffix, sizeof(suffix));
     len = snprintf(path + prefix_len, size - prefix_len, "%08x", suffix);
     if (len == size)
         return -ERANGE;
