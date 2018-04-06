@@ -534,7 +534,8 @@ no_trusted:
     if (cfgsize <= 0)
         goto no_trusted_libs;
 
-    cfgbuf = __alloca(cfgsize);
+    free(cfgbuf);
+    cfgbuf = malloc(cfgsize);
     nuris = get_config_entries(pal_state.root_config, "sgx.trusted_libs",
                                cfgbuf, cfgsize);
     if (nuris) {

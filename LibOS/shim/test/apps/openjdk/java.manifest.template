@@ -3,7 +3,7 @@
 loader.preload = file:$(SHIMPATH)
 loader.exec = file:$(JAVA_HOME)/bin/java
 loader.execname = java
-loader.env.LD_LIBRARY_PATH = /jre/lib/amd64:/jre/lib/amd64/jli:/graphene:/lib/x86_64-linux-gnu:/usr/lib:/usr/lib/x86_64-linux-gnu
+loader.env.LD_LIBRARY_PATH = /jre/lib/amd64:/jre/lib/amd64/jli:/graphene:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu
 loader.env.PATH = /jre/bin:/bin:/usr/bin
 loader.debug_type = $(DEBUGTYPE)
 
@@ -11,23 +11,27 @@ fs.mount.graphene.type = chroot
 fs.mount.graphene.path = /graphene
 fs.mount.graphene.uri = file:$(LIBCDIR)
 
-fs.mount.lib1.type = chroot
-fs.mount.lib1.path = /lib/x86_64-linux-gnu
-fs.mount.lib1.uri = file:/lib/x86_64-linux-gnu
+fs.mount.host1.type = chroot
+fs.mount.host1.path = /usr/lib/x86_64-linux-gnu
+fs.mount.host1.uri = file:/usr/lib/x86_64-linux-gnu
 
-fs.mount.lib2.type = chroot
-fs.mount.lib2.path = /usr/lib/x86_64-linux-gnu
-fs.mount.lib2.uri = file:/usr/lib/x86_64-linux-gnu
+fs.mount.host2.type = chroot
+fs.mount.host2.path = /lib/x86_64-linux-gnu
+fs.mount.host2.uri = file:/lib/x86_64-linux-gnu
 
 fs.mount.jre.type = chroot
 fs.mount.jre.path = /jre
 fs.mount.jre.uri = file:$(JAVA_HOME)
 
+fs.mount.nsswitch.type = chroot
+fs.mount.nsswitch.path = /etc/nsswitch.conf
+fs.mount.nsswitch.uri = file:nsswitch.conf
+
 sys.stack.size = 4M
 sys.brk.size = 64M
 glibc.heap_size = 16M
-sgx.enclave_size = 4G
-sgx.thread_num = 16
+sgx.enclave_size = 8G
+sgx.thread_num = 24
 
 sgx.search_trusted_libs = file:$(LIBCDIR),file:$(JAVA_HOME)/lib/amd64,file:$(JAVA_HOME)/lib/amd64/server,file:$(JAVA_HOME)/lib/amd64/jli,/lib/x86_64-linux-gnu,file:/usr/lib/x86_64-linux-gnu
 
@@ -40,7 +44,8 @@ sgx.trusted_libs.libnet = file:$(JAVA_HOME)/lib/amd64/libnet.so
 sgx.trusted_libs.libnio = file:$(JAVA_HOME)/lib/amd64/libnio.so
 sgx.trusted_libs.libverify = file:$(JAVA_HOME)/lib/amd64/libverify.so
 sgx.trusted_libs.libsunec = file:$(JAVA_HOME)/lib/amd64/libsunec.so
-sgx.trusted_libs.libnss = file:/lib/x86_64-linux-gnu/libnss_files.so.2
+sgx.trusted_libs.libnss = file:$(LIBCDIR)/libnss_files.so.2
+sgx.trusted_libs.libz = file:/lib/x86_64-linux-gnu/libz.so.1
 
 sgx.trusted_files.jvmcfg = file:$(JAVA_HOME)/lib/amd64/jvm.cfg
 sgx.trusted_files.meta = file:$(JAVA_HOME)/lib/meta-index
@@ -48,6 +53,7 @@ sgx.trusted_files.tzdb = file:$(JAVA_HOME)/lib/tzdb.dat
 sgx.trusted_files.currency = file:$(JAVA_HOME)/lib/currency.data
 sgx.trusted_files.rt = file:$(JAVA_HOME)/lib/rt.jar
 sgx.trusted_files.resources = file:$(JAVA_HOME)/lib/resources.jar
+sgx.trusted_files.nsswitch = file:nsswitch.conf
 
 sgx.allowed_files.ext = file:$(JAVA_HOME)/lib/ext
 sgx.allowed_files.classes = file:classes
