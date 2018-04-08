@@ -821,8 +821,16 @@ DEFINE_SHIM_SYSCALL (futex, 6, shim_do_futex, int, unsigned int *, uaddr,
 SHIM_SYSCALL_PASSTHROUGH (sched_setaffinity, 3, int, pid_t, pid, size_t, len,
                           __kernel_cpu_set_t *, user_mask_ptr)
 
-SHIM_SYSCALL_PASSTHROUGH (sched_getaffinity, 3, int, pid_t, pid, size_t, len,
-                          __kernel_cpu_set_t *, user_mask_ptr)
+int shim_do_sched_getaffinity (pid_t pid, size_t len,
+                               __kernel_cpu_set_t * user_mask)
+{
+    memset(user_mask, 0, len);
+    *(uint8_t *) user_mask = 1;
+    return 0;
+}
+
+DEFINE_SHIM_SYSCALL (sched_getaffinity, 3, shim_do_sched_getaffinity, int,
+                     pid_t, pid, size_t, len, __kernel_cpu_set_t *, user_mask_ptr)
 
 SHIM_SYSCALL_PASSTHROUGH (set_thread_area, 1, int, struct user_desc *, u_info)
 

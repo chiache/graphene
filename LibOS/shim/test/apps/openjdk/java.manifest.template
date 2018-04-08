@@ -31,7 +31,7 @@ sys.stack.size = 4M
 sys.brk.size = 64M
 glibc.heap_size = 16M
 sgx.enclave_size = 8G
-sgx.thread_num = 24
+sgx.thread_num = 48
 
 sgx.search_trusted_libs = file:$(LIBCDIR),file:$(JAVA_HOME)/lib/amd64,file:$(JAVA_HOME)/lib/amd64/server,file:$(JAVA_HOME)/lib/amd64/jli,/lib/x86_64-linux-gnu,file:/usr/lib/x86_64-linux-gnu
 
@@ -52,8 +52,11 @@ sgx.trusted_files.meta = file:$(JAVA_HOME)/lib/meta-index
 sgx.trusted_files.tzdb = file:$(JAVA_HOME)/lib/tzdb.dat
 sgx.trusted_files.currency = file:$(JAVA_HOME)/lib/currency.data
 sgx.trusted_files.rt = file:$(JAVA_HOME)/lib/rt.jar
+sgx.trusted_files.jce = file:$(JAVA_HOME)/lib/jce.jar
+sgx.trusted_files.jsse = file:$(JAVA_HOME)/lib/jsse.jar
 sgx.trusted_files.resources = file:$(JAVA_HOME)/lib/resources.jar
 sgx.trusted_files.nsswitch = file:nsswitch.conf
 
 sgx.allowed_files.ext = file:$(JAVA_HOME)/lib/ext
+sgx.allowed_files.security = file:$(JAVA_HOME)/lib/security
 sgx.allowed_files.classes = file:classes
