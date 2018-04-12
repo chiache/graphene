@@ -29,7 +29,7 @@ classes/jmh-jdk-1.0/target/jmh-jdk-microbenchmarks-1.0-SNAPSHOT.jar:
 	cd classes && wget http://hg.openjdk.java.net/code-tools/jmh-jdk-microbenchmarks/archive/tip.tar.gz -O jmh-jdk-1.0.tar.gz
 	cd classes && mkdir -p jmh-jdk-1.0
 	cd classes/jmh-jdk-1.0 && tar -xzf ../jmh-jdk-1.0.tar.gz --strip-components=1
-	cd classes/apache-sshd-1.2.0 && mvn install -Dcheckstyle.skip -Dmaven.test.skip=true
+	cd classes/jmh-jdk-1.0 && mvn install -Dcheckstyle.skip -Dmaven.test.skip=true
 
 clean-classes:
 	rm -f classes/*.class
