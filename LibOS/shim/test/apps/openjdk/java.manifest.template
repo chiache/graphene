@@ -27,11 +27,11 @@ fs.mount.nsswitch.type = chroot
 fs.mount.nsswitch.path = /etc/nsswitch.conf
 fs.mount.nsswitch.uri = file:nsswitch.conf
 
+glibc.heap_size = 16M
 sys.stack.size = 4M
 sys.brk.size = 64M
-glibc.heap_size = 16M
-sgx.enclave_size = 8G
-sgx.thread_num = 48
+sgx.enclave_size = 4G
+sgx.thread_num = 12
 
 sgx.search_trusted_libs = file:$(LIBCDIR),file:$(JAVA_HOME)/lib/amd64,file:$(JAVA_HOME)/lib/amd64/server,file:$(JAVA_HOME)/lib/amd64/jli,/lib/x86_64-linux-gnu,file:/usr/lib/x86_64-linux-gnu
 
