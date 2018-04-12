@@ -807,9 +807,11 @@ SHIM_SYSCALL_PASSTHROUGH (sched_setaffinity, 3, int, pid_t, pid, size_t, len,
 int shim_do_sched_getaffinity (pid_t pid, size_t len,
                                __kernel_cpu_set_t * user_mask)
 {
+    int ncpus = PAL_CB(cpu_info.cpu_num);
     memset(user_mask, 0, len);
-    *(uint8_t *) user_mask = 1;
-    return 0;
+    for (int i = 0 ; i < ncpus ; i++)
+        ((uint8_t *) user_mask)[i / 8] |= 1 << (i % 8);
+    return ncpus;
 }
 
 DEFINE_SHIM_SYSCALL (sched_getaffinity, 3, shim_do_sched_getaffinity, int,
