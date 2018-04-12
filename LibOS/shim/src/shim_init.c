@@ -654,7 +654,7 @@ DEFINE_PROFILE_INTERVAL(init_signal,                init);
     do {                                                                \
         int _err = CALL_INIT(func, ##__VA_ARGS__);                      \
         if (_err < 0) {                                                 \
-            debug("initialization failed in " #func " (%d)\n", _err);   \
+            sys_printf("shim_init() in " #func " (%d)\n", _err);        \
             shim_terminate();                                           \
         }                                                               \
         SAVE_PROFILE_INTERVAL(func);                                    \
@@ -765,6 +765,17 @@ restore:
     RUN_INIT(init_loader);
     RUN_INIT(init_ipc_helper);
     RUN_INIT(init_signal);
+
+    if (PAL_CB(parent_process)) {
+        /* Notify the parent process */
+        struct newproc_response res;
+        res.child_vmid = cur_process.vmid;
+        res.failure = 0;
+        if (!DkStreamWrite(PAL_CB(parent_process), 0,
+                           sizeof(struct newproc_response),
+                           &res, NULL))
+            return -PAL_ERRNO;
+    }
 
     debug("shim process initialized\n");
 

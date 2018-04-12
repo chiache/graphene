@@ -246,10 +246,28 @@ __remove_vma (struct shim_vma * vma, struct shim_vma * prev)
  */
 static void * current_heap_top;
 
+static int __bkeep_mmap (struct shim_vma * prev,
+                         void * start, void * end, int prot, int flags,
+                         struct shim_handle * file, uint64_t offset,
+                         const char * comment);
+
+static int __bkeep_munmap (struct shim_vma ** prev,
+                           void * start, void * end, int flags);
+
+static int __bkeep_mprotect (struct shim_vma * prev,
+                             void * start, void * end, int prot, int flags);
+
 int init_vma (void)
 {
     for (int i = 0 ; i < RESERVED_VMAS ; i++)
         reserved_vmas[i] = &early_vmas[i];
+
+    /* if the PAL loads the executable, create a VMA for the range */
+    if (PAL_CB(executable_range.start) != PAL_CB(executable_range.end))
+        __bkeep_mmap(NULL, PAL_CB(executable_range.start),
+                     PAL_CB(executable_range.end),
+                     PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS|VMA_UNMAPPED,
+                     NULL, 0, "exec");
 
     if (!(vma_mgr = create_mem_mgr(init_align_up(VMA_MGR_ALLOC)))) {
         debug("failed creating the VMA allocator\n");
@@ -276,34 +294,25 @@ int init_vma (void)
 
     create_lock(vma_list_lock);
 
-    uint64_t bottom = (uint64_t) PAL_CB(user_address.start);
-    uint64_t top    = (uint64_t) PAL_CB(user_address.end);
+    current_heap_top = PAL_CB(user_address.end);
 
 #if ENABLE_ASLR == 1
+    /*
+     * Randomize the heap top in top 5/6 of the user address space.
+     * This is a simplified version of the mmap_base() logic in the Linux
+     * kernel: https://elixir.bootlin.com/linux/v4.8/ident/mmap_base
+     */
+    uint64_t addr_rand_size =
+        (PAL_CB(user_address.end) - PAL_CB(user_address.start)) * 5 / 6;
     uint64_t rand;
     getrand(&rand, sizeof(rand));
-    current_heap_top = (void *)
-        bottom + rand % ((top - bottom) / allocsize) * allocsize;
-#else
-    current_heap_top = (void *) top;
+    current_heap_top -= ALIGN_DOWN(rand % addr_rand_size);
 #endif
 
-    debug("User space range: 0x%llx-0x%llx\n", bottom, top);
     debug("heap top adjusted to %p\n", current_heap_top);
 
     return 0;
 }
-
-static int __bkeep_mmap (struct shim_vma * prev,
-                         void * start, void * end, int prot, int flags,
-                         struct shim_handle * file, uint64_t offset,
-                         const char * comment);
-
-static int __bkeep_munmap (struct shim_vma ** prev,
-                           void * start, void * end, int flags);
-
-static int __bkeep_mprotect (struct shim_vma * prev,
-                             void * start, void * end, int prot, int flags);
 
 static inline struct shim_vma * __get_new_vma (void)
 {
@@ -782,8 +791,7 @@ void * bkeep_unmapped_heap (uint64_t length, int prot, int flags,
     void * bottom_addr = PAL_CB(user_address.start);
     void * top_addr = current_heap_top;
     void * heap_max = PAL_CB(user_address.end);
-    void * addr;
-    bool update_heap_top = true;
+    void * addr = NULL;
 
 #ifdef MAP_32BIT
     /*
@@ -793,45 +801,50 @@ void * bkeep_unmapped_heap (uint64_t length, int prot, int flags,
 #define ADDR_32BIT ((void *) (1ULL << 32))
 
     if (flags & MAP_32BIT) {
+        /* Try the lower 4GB memory space */
         if (heap_max > ADDR_32BIT)
             heap_max = ADDR_32BIT;
 
-        if (bottom_addr >= heap_max) {
-            unlock(vma_list_lock);
-            return NULL;
-        }
-
-        if (top_addr > heap_max) {
+        if (top_addr > heap_max)
             top_addr = heap_max;
-            update_heap_top = false;
-        }
     }
 #endif
 
-    if (top_addr <= bottom_addr) {
-        addr = __bkeep_unmapped(top_addr, bottom_addr,
-                                length, prot, flags,
-                                file, offset, comment);
+    if (top_addr <= bottom_addr)
+        goto again;
 
-        if (addr) {
-            if (update_heap_top)
-                current_heap_top = addr;
-            goto out;
+    /* Try first time */
+    addr = __bkeep_unmapped(top_addr, bottom_addr,
+                            length, prot, flags,
+                            file, offset, comment);
+
+    if (addr) {
+        /*
+         * we only update the current heap top when we get the
+         * address from [bottom_addr, current_heap_top).
+         */
+        if (top_addr == current_heap_top) {
+            debug("heap top adjusted to %p\n", addr);
+            current_heap_top = addr;
         }
-
-        if (top_addr == heap_max)
-            goto out;
+        goto out;
     }
 
+again:
+    if (top_addr >= heap_max)
+        goto out;
+
     /* Try to allocate above the current heap top */
-    top_addr = heap_max;
-    addr = __bkeep_unmapped(top_addr, bottom_addr,
+    addr = __bkeep_unmapped(heap_max, bottom_addr,
                             length, prot, flags,
                             file, offset, comment);
 
 out:
     __restore_reserved_vmas();
     unlock(vma_list_lock);
+#ifdef MAP_32BIT
+    assert(!(flags & MAP_32BIT) || !addr || addr + length <= ADDR_32BIT);
+#endif
     return addr;
 }
 
@@ -1139,7 +1152,7 @@ retry_dump_vmas:
     for (struct shim_vma_val * vma = &vmas[count - 1] ; vma >= vmas ; vma--)
         DO_CP(vma, vma, NULL);
 
-    free_vma_vals(vmas, count);
+    free_vma_val_array(vmas, count);
 }
 END_CP_FUNC_NO_RS(all_vmas)
 

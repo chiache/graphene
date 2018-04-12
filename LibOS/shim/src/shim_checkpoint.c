@@ -616,8 +616,8 @@ int restore_checkpoint (struct cp_header * cphdr, struct mem_header * memhdr,
         rs_func rs = (&__rs_func) [cpent->cp_type - CP_FUNC_BASE];
         ret = (*rs) (cpent, base, offset, rebase);
         if (ret < 0) {
-            debug("restoring %s failed at %p (err=%d)\n", CP_FUNC_NAME(cpent->cp_type),
-                  base + offset, -ret);
+            sys_printf("restore_checkpoint() at %s (%d)\n",
+                       CP_FUNC_NAME(cpent->cp_type), ret);
             return ret;
         }
 next:
@@ -1225,16 +1225,6 @@ int do_migration (struct newproc_cp_header * hdr, void ** cpptr)
         SAVE_PROFILE_INTERVAL(child_load_checkpoint_on_pipe);
         debug("%d bytes read on stream\n", total_bytes);
     }
-
-    /* Notify the parent process that the checkpoint is loaded. */
-    struct newproc_response res;
-    res.child_vmid = cur_process.vmid;
-    res.failure = 0;
-    int bytes = DkStreamWrite(PAL_CB(parent_process), 0,
-                              sizeof(struct newproc_response),
-                              &res, NULL);
-    if (!bytes)
-        return -PAL_ERRNO;
 
     /* Receive socket or RPC handles from the parent process. */
     ret = receive_handles_on_stream(&hdr->palhdl, (ptr_t) base, rebase);
