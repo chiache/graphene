@@ -606,9 +606,9 @@ static int sgx_ocall_gettime(void * pms)
 {
     ms_ocall_gettime_t * ms = (ms_ocall_gettime_t *) pms;
     ODEBUG(OCALL_GETTIME, ms);
-    struct timeval tv;
-    INLINE_SYSCALL(gettimeofday, 2, &tv, NULL);
-    ms->ms_microsec = tv.tv_sec * 1000000UL + tv.tv_usec;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    ms->ms_microsec = 1000000ULL * ts.tv_sec + ts.tv_nsec / 1000;
     return 0;
 }
 

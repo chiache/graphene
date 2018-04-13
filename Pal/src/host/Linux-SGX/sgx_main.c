@@ -14,6 +14,7 @@
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <asm/errno.h>
+#include <sys/auxv.h>
 
 #include <sysdep.h>
 #include <sysdeps/generic/ldsodefs.h>
@@ -810,6 +811,11 @@ static int load_enclave (struct pal_enclave * enclave,
     ret = sgx_signal_setup();
     if (ret < 0)
         return ret;
+
+#if USE_LOWRES_CLOCK == 1
+    pal_sec->vsyscall_gtod_addr =
+            (PAL_PTR) getauxval(AT_SYSINFO_EHDR) - 0x3000 + 128;
+#endif
 
     current_enclave = enclave;
     map_tcs(INLINE_SYSCALL(gettid, 0));

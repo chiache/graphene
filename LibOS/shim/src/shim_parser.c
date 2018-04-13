@@ -318,7 +318,7 @@ struct parser_table {
     { .slow = 0, .parser = { NULL } }, /* timer_getoverrun */
     { .slow = 0, .parser = { NULL } }, /* timer_delete */
     { .slow = 0, .parser = { NULL } }, /* clock_settime */
-    { .slow = 0, .parser = { NULL } }, /* clock_gettime */
+    { .slow = 0, .parser = { NULL, &parse_timespec } }, /* clock_gettime */
     { .slow = 0, .parser = { NULL } }, /* clock_getres */
     { .slow = 0, .parser = { NULL } }, /* clock_nanosleep */
     { .slow = 0, .parser = { NULL } }, /* exit_group */

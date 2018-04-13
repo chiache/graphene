@@ -83,13 +83,13 @@ int _DkThreadCreate (PAL_HANDLE * handle, int (*callback) (void *),
     return 0;
 }
 
-int _DkThreadDelayExecution (unsigned long * duration)
+int _DkThreadDelayExecution (uint64_t * duration)
 {
     struct timespec sleeptime;
     struct timespec remainingtime;
 
-    long sec = (unsigned long) *duration / 1000000;
-    long microsec = (unsigned long) *duration - (sec * 1000000);
+    uint64_t sec = *duration / 1000000;
+    uint64_t microsec = *duration - (sec * 1000000);
 
     sleeptime.tv_sec = sec;
     sleeptime.tv_nsec = microsec * 1000;
@@ -97,8 +97,8 @@ int _DkThreadDelayExecution (unsigned long * duration)
     int ret = INLINE_SYSCALL(nanosleep, 2, &sleeptime, &remainingtime);
 
     if (IS_ERR(ret)) {
-        PAL_NUM remaining = remainingtime.tv_sec * 1000000 +
-                            remainingtime.tv_nsec / 1000;
+        uint64_t remaining = 1000000ULL * remainingtime.tv_sec +
+                             remainingtime.tv_nsec / 1000;
 
         *duration -= remaining;
         return -PAL_ERROR_INTERRUPTED;

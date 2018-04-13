@@ -55,6 +55,10 @@ extern struct pal_linux_state {
 
     /* enclave */
     const char *    runtime_dir;
+
+#if USE_LOWRES_CLOCK == 1
+    struct vsyscall_gtod_data * vsyscall_gtod;
+#endif
 } linux_state;
 
 #include <asm/mman.h>
@@ -210,6 +214,8 @@ char * __hex2str(void * hex, int size)
 # define ARCH_VFORK()                                                       \
     (INLINE_SYSCALL(clone, 4, CLONE_VM|CLONE_VFORK, 0, NULL, NULL))
 #endif
+
+extern int clock_gettime(int clk_id, struct timespec *tp);
 
 #endif /* IN_ENCLAVE */
 

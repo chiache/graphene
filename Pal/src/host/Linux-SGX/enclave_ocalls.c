@@ -700,7 +700,7 @@ int ocall_sock_shutdown (int sockfd, int how)
     return retval;
 }
 
-int ocall_gettime (unsigned long * microsec)
+int ocall_gettime (uint64_t * microsec)
 {
     int retval = 0;
     ms_ocall_gettime_t * ms;
@@ -713,7 +713,7 @@ int ocall_gettime (unsigned long * microsec)
     return retval;
 }
 
-int ocall_sleep (unsigned long * microsec)
+int ocall_sleep (uint64_t * microsec)
 {
     int retval = 0;
     ms_ocall_sleep_t * ms;

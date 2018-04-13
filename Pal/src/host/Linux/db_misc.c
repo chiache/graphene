@@ -37,7 +37,7 @@
 
 int __gettimeofday(struct timeval *tv, struct timezone *tz);
 
-unsigned long _DkSystemTimeQueryEarly (void)
+uint64_t _DkSystemTimeQueryEarly (void)
 {
 #if USE_CLOCK_GETTIME == 1
     struct timespec time;
@@ -66,7 +66,7 @@ unsigned long _DkSystemTimeQueryEarly (void)
 #endif
 }
 
-unsigned long _DkSystemTimeQuery (void)
+uint64_t _DkSystemTimeQuery (void)
 {
 #if USE_CLOCK_GETTIME == 1
     struct timespec time;

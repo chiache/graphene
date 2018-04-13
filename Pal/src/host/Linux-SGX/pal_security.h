@@ -61,6 +61,10 @@ struct pal_sec {
     PAL_SEC_STR     pipe_prefix;
     PAL_IDX         mcast_port, mcast_srv, mcast_cli;
 
+#if USE_LOWRES_CLOCK == 1
+    PAL_PTR         vsyscall_gtod_addr;
+#endif
+
 #ifdef DEBUG
     PAL_BOL         in_gdb;
 #endif

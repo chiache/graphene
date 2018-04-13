@@ -17,6 +17,8 @@
 
 #define SGX_HAS_FSGSBASE    (1)
 
+#define USE_LOWRES_CLOCK    (0)
+
 #define TRUSTED_STUB_SIZE   (PRESET_PAGESIZE * 4)
 
 #define CACHE_FILE_STUBS    (1)

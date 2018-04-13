@@ -36,9 +36,23 @@
 #include <linux/time.h>
 #include <asm/fcntl.h>
 
-unsigned long _DkSystemTimeQuery (void)
+uint64_t _DkSystemTimeQuery (void)
 {
-    unsigned long microsec;
+#if USE_LOWRES_CLOCK == 1
+    if (linux_state.vsyscall_gtod) {
+        struct vsyscall_gtod_data * gtod = linux_state.vsyscall_gtod;
+        uint64_t ns;
+        volatile unsigned seq;
+        do {
+            seq = gtod->seq;
+            ns = gtod->wall_time_snsec;
+            ns >>= gtod->shift;
+            ns += 1000000ULL * gtod->wall_time_sec;
+        } while (seq != gtod->seq);
+        return ns / 1000;
+    }
+#endif
+    uint64_t microsec;
     int ret = ocall_gettime(&microsec);
     assert(!ret);
     return microsec;

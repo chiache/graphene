@@ -57,7 +57,7 @@ DkThreadDelayExecution (PAL_NUM duration)
 {
     ENTER_PAL_CALL(DkThreadDelayExecution);
 
-    unsigned long dur = duration;
+    uint64_t dur = duration;
     int ret = _DkThreadDelayExecution(&dur);
 
     if (ret < 0) {

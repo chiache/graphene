@@ -106,7 +106,7 @@ int _DkThreadCreate (PAL_HANDLE * handle, int (*callback) (void *),
     return 0;
 }
 
-int _DkThreadDelayExecution (unsigned long * duration)
+int _DkThreadDelayExecution (uint64_t * duration)
 {
     return ocall_sleep(duration);
 }

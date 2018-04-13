@@ -134,4 +134,26 @@ struct sockopt {
     int tcp_nodelay:1;
 };
 
+struct vsyscall_gtod_data {
+    unsigned seq;
+
+    int vclock_mode;
+    uint64_t cycle_last;
+    uint64_t mask;
+    uint32_t mult;
+    uint32_t shift;
+
+    uint64_t wall_time_snsec;
+    uint64_t wall_time_sec;
+    uint64_t monotonic_time_sec;
+    uint64_t monotonic_time_snsec;
+    uint64_t wall_time_coarse_sec;
+    uint64_t wall_time_coarse_nsec;
+    uint64_t monotonic_time_coarse_sec;
+    uint64_t monotonic_time_coarse_nsec;
+
+    int tz_minuteswest;
+    int tz_dsttime;
+};
+
 #endif

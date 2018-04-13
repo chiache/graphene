@@ -90,9 +90,9 @@ int ocall_create_process (const char * uri,
 
 int ocall_futex (int * uaddr, int op, int val, const uint64_t * timeout);
 
-int ocall_gettime (unsigned long * microsec);
+int ocall_gettime (uint64_t * microsec);
 
-int ocall_sleep (unsigned long * microsec);
+int ocall_sleep (uint64_t * microsec);
 
 int ocall_socketpair (int domain, int type, int protocol, int sockfds[2]);
 

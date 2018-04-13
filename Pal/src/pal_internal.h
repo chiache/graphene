@@ -292,7 +292,7 @@ PAL_HANDLE _DkBroadcastStreamOpen (void);
 int _DkThreadCreate (PAL_HANDLE * handle, int (*callback) (void *),
                      const void * parem, int flags);
 void _DkThreadExit (void);
-int _DkThreadDelayExecution (unsigned long * duration);
+int _DkThreadDelayExecution (uint64_t * duration);
 void _DkThreadYieldExecution (void);
 int _DkThreadResume (PAL_HANDLE threadHandle);
 int _DkProcessCreate (PAL_HANDLE * handle, const char * uri,
@@ -334,7 +334,7 @@ void _DkExceptionReturn (void * event);
 /* other DK calls */
 int _DkInternalLock (PAL_LOCK * mut);
 int _DkInternalUnlock (PAL_LOCK * mut);
-unsigned long _DkSystemTimeQuery (void);
+uint64_t _DkSystemTimeQuery (void);
 int _DkFastRandomBitsRead (void * buffer, int size);
 int _DkRandomBitsRead (void * buffer, int size);
 int _DkSegmentRegisterSet (int reg, const void * addr);

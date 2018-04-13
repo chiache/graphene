@@ -141,6 +141,11 @@ void pal_linux_main(const char ** arguments, const char ** environments,
 
     memcpy(&pal_sec, sec_info, sizeof(struct pal_sec));
 
+#if USE_LOWRES_CLOCK == 1
+    linux_state.vsyscall_gtod =
+        (struct vsyscall_gtod_data *) pal_sec.vsyscall_gtod_addr;
+#endif
+
     /* set up page allocator and slab manager */
     init_slab_mgr(pagesz);
     init_untrusted_slab_mgr(pagesz);
