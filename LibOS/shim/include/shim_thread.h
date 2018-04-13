@@ -218,10 +218,9 @@ static inline int thread_sleep (uint64_t timeout_us)
     if (!event)
         return -EINVAL;
 
-    if (!DkObjectsWaitAny(1, &event, timeout_us)) {
-        debug("thread_sleep() failed (%d)\n", -PAL_ERRNO);
-        return -PAL_ERRNO;
-    }
+    if (!DkObjectsWaitAny(1, &event, timeout_us))
+        return PAL_NATIVE_ERRNO == PAL_ERROR_TRYAGAIN ?
+               -ETIMEDOUT : -PAL_ERRNO;
 
     return 0;
 }

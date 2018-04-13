@@ -189,9 +189,6 @@ int shim_do_futex (unsigned int * uaddr, int op, int val, void * utime,
 
             unlock(hdl->lock);
             ret = thread_sleep(timeout_us);
-            /* DEP 1/28/17: Should return ETIMEDOUT, not EAGAIN, on timeout. */
-            if (ret == -EAGAIN)
-                ret = -ETIMEDOUT;
             if (ret == -ETIMEDOUT)
                 listp_del(&waiter, &futex->waiters, list);
             lock(hdl->lock);
