@@ -147,6 +147,9 @@ int shim_do_futex (unsigned int * uaddr, int op, int val, void * utime,
                     }
                     timeout_us -= current_time;
                 }
+
+                debug("FUTEX_WAIT_BITSET: timeout (%ld, %ld) = %ld usec\n",
+                      ts->tv_sec, ts->tv_nsec, timeout_us);
             }
 
         /* Note: for FUTEX_WAIT, timeout is interpreted as a relative
@@ -161,13 +164,16 @@ int shim_do_futex (unsigned int * uaddr, int op, int val, void * utime,
                 struct timespec *ts = (struct timespec*) utime;
                 // Round to microsecs
                 timeout_us = (ts->tv_sec * 1000000) + (ts->tv_nsec / 1000);
+
+                debug("FUTEX_WAIT: timeout (%ld, %ld) = %ld usec\n",
+                      ts->tv_sec, ts->tv_nsec, timeout_us);
             }
 
         {
             uint32_t bitset = (futex_op == FUTEX_WAIT_BITSET) ? val3 :
                               0xffffffff;
 
-            debug("FUTEX_WAIT: %p (val = %d) vs %d mask = %08x, timeout ptr %p\n",
+            debug("FUTEX_WAIT: %p (val = %d) vs %d mask = %08x, timeout %p\n",
                   uaddr, *uaddr, val, bitset, utime);
 
             if (*uaddr != val) {
@@ -202,7 +208,7 @@ int shim_do_futex (unsigned int * uaddr, int op, int val, void * utime,
             int nwaken = 0;
             uint32_t bitset = (futex_op == FUTEX_WAKE_BITSET) ? val3 :
                               0xffffffff;
-            
+
             debug("FUTEX_WAKE: %p (val = %d) count = %d mask = %08x\n",
                   uaddr, *uaddr, val, bitset);
 

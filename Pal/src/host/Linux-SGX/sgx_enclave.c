@@ -245,9 +245,25 @@ static int sgx_ocall_futex(void * pms)
         ts->tv_sec = ms->ms_timeout / 1000000;
         ts->tv_nsec = (ms->ms_timeout - ts->tv_sec * 1000000) * 1000;
     }
+
     ret = INLINE_SYSCALL(futex, 6, ms->ms_futex, ms->ms_op, ms->ms_val,
                          ts, NULL, 0);
-    return IS_ERR(ret) ? unix_to_pal_error(ERRNO(ret)) : ret;
+
+    if (IS_ERR(ret)) {
+        switch (ERRNO(ret)) {
+            case EWOULDBLOCK:
+                ret = 0;
+                break;
+            case ETIMEDOUT:
+                if (ts)
+                    ms->ms_timeout = ts->tv_sec * 1000000 + ts->tv_nsec / 1000;
+            default:
+                ret = unix_to_pal_error(ERRNO(ret));
+                break;
+        }
+    }
+
+    return ret;
 }
 
 static int sgx_ocall_socketpair(void * pms)

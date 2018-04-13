@@ -94,12 +94,8 @@ int _DkEventWaitTimeout (PAL_HANDLE event, uint64_t timeout)
         do {
             ret = ocall_futex((int *) &event->event.signaled->counter,
                               FUTEX_WAIT, 0, timeout ? &waittime : NULL);
-            if (ret < 0) {
-                if (ret == -PAL_ERROR_TRYAGAIN)
-                    ret = 0;
-                else
-                    break;
-            }
+            if (ret < 0)
+                break;
         } while (event->event.isnotification &&
                  !atomic_read(event->event.signaled));
 
@@ -119,12 +115,8 @@ int _DkEventWait (PAL_HANDLE event)
         do {
             ret = ocall_futex((int *) &event->event.signaled->counter,
                               FUTEX_WAIT, 0, NULL);
-            if (ret < 0) {
-                if (ret == -PAL_ERROR_TRYAGAIN)
-                    ret = 0;
-                else
-                    break;
-            }
+            if (ret < 0)
+                break;
         } while (event->event.isnotification &&
                  !atomic_read(event->event.signaled));
 

@@ -84,15 +84,10 @@ int _DkMutexLockTimeout (struct mutex_handle * m, uint64_t timeout)
          * can be used for futex. Potentially this design may allow
          * attackers to change the mutex value and cause DoS.
          */
-        ret = ocall_futex((int *) m->locked, FUTEX_WAIT, MUTEX_LOCKED, timeout == -1 ? NULL : &timeout);
+        ret = ocall_futex((int *) m->locked, FUTEX_WAIT, MUTEX_LOCKED,
+                          timeout == -1 ? NULL : &timeout);
 
         if (ret < 0) {
-            if (-ret == EWOULDBLOCK) {
-                ret = -PAL_ERROR_TRYAGAIN;
-                atomic_dec(&m->nwaiters);
-                goto out;
-            }
-            ret = unix_to_pal_error(ERRNO(ret));
             atomic_dec(&m->nwaiters);
             goto out;
         }
@@ -119,7 +114,6 @@ int _DkMutexAcquireTimeout (PAL_HANDLE handle, int _timeout)
 
 int _DkMutexUnlock (struct mutex_handle * m)
 {
-    int ret = 0;
     int need_wake;
 
     /* Unlock */
@@ -134,7 +128,7 @@ int _DkMutexUnlock (struct mutex_handle * m)
     if (need_wake)
         ocall_futex((int *) m->locked, FUTEX_WAKE, 1, NULL);
 
-    return ret;
+    return 0;
 }
 
 void _DkMutexRelease (PAL_HANDLE handle)
