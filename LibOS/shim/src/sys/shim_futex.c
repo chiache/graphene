@@ -189,13 +189,11 @@ int shim_do_futex (unsigned int * uaddr, int op, int val, void * utime,
 
             unlock(hdl->lock);
             ret = thread_sleep(timeout_us);
-            if (ret == -ETIMEDOUT)
-                listp_del(&waiter, &futex->waiters, list);
             lock(hdl->lock);
             /* Chia-Che 10/17/17: FUTEX_WAKE should remove the waiter
              * from the list; if not, we should remove it now. */
             if (!list_empty(&waiter, list))
-                listp_del(&waiter, &futex->waiters, list);
+                listp_del_init(&waiter, &futex->waiters, list);
             break;
         }
 

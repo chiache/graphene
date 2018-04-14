@@ -122,7 +122,7 @@ int _DkMutexUnlock (struct mutex_handle * m)
      * before we read the waiter count. */
     mb();
 
-    need_wake= atomic_read(&m->nwaiters);
+    need_wake = atomic_read(&m->nwaiters);
 
     /* If we need to wake someone up... */
     if (need_wake)

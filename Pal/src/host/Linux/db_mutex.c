@@ -89,9 +89,7 @@ _DkMutexCreate (PAL_HANDLE * handle, int initialCount)
 int _DkMutexLockTimeout (struct mutex_handle * m, uint64_t timeout)
 {
     int i, ret = 0;
-#ifdef DEBUG_MUTEX
-    int tid = INLINE_SYSCALL(gettid, 0);
-#endif
+
     /* If this is a trylock-style call, break more quickly. */
     int iterations = (timeout == 0) ? 1 : MUTEX_SPINLOCK_TIMES;
 
@@ -124,16 +122,7 @@ int _DkMutexLockTimeout (struct mutex_handle * m, uint64_t timeout)
         ret = INLINE_SYSCALL(futex, 6, m, FUTEX_WAIT, MUTEX_LOCKED, waittimep, NULL, 0);
 
         if (IS_ERR(ret)) {
-            if (ERRNO(ret) == EWOULDBLOCK) {
-                if (timeout != NO_TIMEOUT) {
-                    ret = -PAL_ERROR_TRYAGAIN;
-                    atomic_dec(&m->nwaiters);
-                    goto out;
-                }
-            } else {
-#ifdef DEBUG_MUTEX
-                printf("futex failed (err = %d)\n", ERRNO(ret));
-#endif
+            if (ERRNO(ret) != EWOULDBLOCK) {
                 ret = unix_to_pal_error(ERRNO(ret));
                 atomic_dec(&m->nwaiters);
                 goto out;
@@ -144,16 +133,8 @@ int _DkMutexLockTimeout (struct mutex_handle * m, uint64_t timeout)
     atomic_dec(&m->nwaiters);
 
 success:
-#ifdef DEBUG_MUTEX
-    m->owner = tid;
-#endif
     ret = 0;
 out:
-
-#ifdef DEBUG_MUTEX
-    if (ret < 0)
-        printf("mutex failed (%s, tid = %d)\n", PAL_STRERROR(ret), tid);
-#endif
     return ret;
 }
 
@@ -171,10 +152,6 @@ int _DkMutexUnlock (struct mutex_handle * m)
 {
     int ret = 0;
     int need_wake;
-
-#ifdef DEBUG_MUTEX
-    m->owner = 0;
-#endif
 
     /* Unlock */
     m->locked = 0;
