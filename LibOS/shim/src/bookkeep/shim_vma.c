@@ -178,6 +178,9 @@ static inline void __assert_vma_list (void)
 /*
  * __lookup_vma() returns the VMA that contains the address; otherwise,
  * returns NULL. "pprev" returns the highest VMA below the address.
+ * __lookup_vma() fills "pprev" even when the function cannot find a
+ * matching vma for "addr".
+ *
  * vma_list_lock must be held when calling this function.
  */
 static inline struct shim_vma *
@@ -191,7 +194,7 @@ __lookup_vma (void * addr, struct shim_vma ** pprev)
         if (test_vma_contain(vma, addr, addr + 1))
             goto out;
 
-        assert(vma->end >= vma->start);
+        assert(vma->end > vma->start);
         assert(!prev || prev->end <= vma->start);
         prev = vma;
     }
@@ -257,17 +260,42 @@ static int __bkeep_munmap (struct shim_vma ** prev,
 static int __bkeep_mprotect (struct shim_vma * prev,
                              void * start, void * end, int prot, int flags);
 
+static int
+__bkeep_preloaded (void * start, void * end, int prot, int flags,
+                   const char * comment)
+{
+    if (!start || !end || start == end)
+        return 0;
+
+    struct shim_vma * prev = NULL;
+    __lookup_vma(start, &prev);
+    return __bkeep_mmap(prev, start, end, prot, flags, NULL, 0, comment);
+}
+
 int init_vma (void)
 {
+    int ret;
+
     for (int i = 0 ; i < RESERVED_VMAS ; i++)
         reserved_vmas[i] = &early_vmas[i];
 
-    /* if the PAL loads the executable, create a VMA for the range */
-    if (PAL_CB(executable_range.start) != PAL_CB(executable_range.end))
-        __bkeep_mmap(NULL, PAL_CB(executable_range.start),
-                     PAL_CB(executable_range.end),
-                     PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS|VMA_UNMAPPED,
-                     NULL, 0, "exec");
+    /* Bookkeeping for preloaded areas */
+
+    ret = __bkeep_preloaded(PAL_CB(executable_range.start),
+                            PAL_CB(executable_range.end),
+                            PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS|VMA_UNMAPPED,
+                            "exec");
+    if (ret < 0)
+        return ret;
+
+    ret = __bkeep_preloaded(PAL_CB(manifest_preload.start),
+                            PAL_CB(manifest_preload.end),
+                            PROT_READ, MAP_PRIVATE|MAP_ANONYMOUS|VMA_INTERNAL,
+                            "manifest");
+    if (ret < 0)
+        return ret;
+
+    /* Initialize the allocator */
 
     if (!(vma_mgr = create_mem_mgr(init_align_up(VMA_MGR_ALLOC)))) {
         debug("failed creating the VMA allocator\n");
@@ -403,6 +431,17 @@ __set_vma_comment (struct shim_vma * vma, const char * comment)
     vma->comment[len] = 0;
 }
 
+/*
+ * Add bookkeeping for mmap(). "prev" must point to the the immediately
+ * precedent vma of the address to map, or be NULL if no vma is lower than
+ * the address. If the bookkeeping area overlaps with some existing vmas,
+ * we must check whether the caller (from user, internal code, or checkpointing
+ * procedure) is allowed to overwrite the existing vmas.
+ *
+ * Bookkeeping convention (must follow):
+ * Create the bookkeeping BEFORE any allocation PAL calls
+ * (DkVirtualMemoryAlloc() or DkStreamMap()).
+ */
 static int __bkeep_mmap (struct shim_vma * prev,
                          void * start, void * end, int prot, int flags,
                          struct shim_handle * file, uint64_t offset,
@@ -537,6 +576,18 @@ finish:
     assert(vma->start < vma->end);
 }
 
+/*
+ * Update bookkeeping for munmap(). "*pprev" must point to the immediately
+ * precedent vma of the address to unmap, or be NULL if no vma is lower than
+ * the address. If the bookkeeping area overlaps with some existing vmas,
+ * we must check whether the caller (from user, internal code, or checkpointing
+ * procedure) is allowed to overwrite the existing vmas. "pprev" can be
+ * updated if a new vma lower than the unmapping address is added.
+ *
+ * Bookkeeping convention (must follow):
+ * Make deallocation PAL calls (DkVirtualMemoryFree() or DkStreamUnmap())
+ * BEFORE updating the bookkeeping.
+ */
 static int __bkeep_munmap (struct shim_vma ** pprev,
                            void * start, void * end, int flags)
 {
@@ -621,6 +672,16 @@ int bkeep_munmap (void * addr, uint64_t length, int flags)
     return ret;
 }
 
+/*
+ * Update bookkeeping for mprotect(). "prev" must point to the immediately
+ * precedent vma of the address to protect, or be NULL if no vma is lower than
+ * the address. If the bookkeeping area overlaps with some existing vmas,
+ * we must check whether the caller (from user, internal code, or checkpointing
+ * procedure) is allowed to overwrite the existing vmas.
+ *
+ * Bookkeeping convention (must follow):
+ * Update the bookkeeping BEFORE calling DkVirtualMemoryProtect().
+ */
 static int __bkeep_mprotect (struct shim_vma * prev,
                              void * start, void * end, int prot, int flags)
 {
@@ -722,9 +783,9 @@ int bkeep_mprotect (void * addr, uint64_t length, int prot, int flags)
 }
 
 /*
- * Search for an unmapped area within [bottom, top) that is bigger enough
+ * Search for an unmapped area within [bottom, top) that is big enough
  * to allocate "length" bytes. The search approach is top-down.
- * If this function returns an non-NULL address, the corresponding VMA is
+ * If this function returns a non-NULL address, the corresponding VMA is
  * added to the VMA list.
  */
 static void * __bkeep_unmapped (void * top_addr, void * bottom_addr,
@@ -741,7 +802,7 @@ static void * __bkeep_unmapped (void * top_addr, void * bottom_addr,
     struct shim_vma * cur = __lookup_vma(top_addr, &prev);
 
     while (true) {
-        /* setting the range for searching */
+        /* Set the range for searching */
         void * end = cur ? cur->start : top_addr;
         void * start =
             (prev && prev->end > bottom_addr) ? prev->end : bottom_addr;
@@ -905,7 +966,7 @@ int lookup_overlap_vma (void * addr, uint64_t length,
     return 0;
 }
 
-int dump_all_vmas (struct shim_vma_val * vmas, size_t size)
+int dump_all_vmas (struct shim_vma_val * vmas, size_t max_count)
 {
     struct shim_vma_val * val = vmas;
     struct shim_vma * vma;
@@ -918,9 +979,9 @@ int dump_all_vmas (struct shim_vma_val * vmas, size_t size)
         if (vma->flags & VMA_UNMAPPED)
             continue;
 
-        if (cnt == size) {
+        if (cnt == max_count) {
             cnt = -EOVERFLOW;
-            for (int i = 0 ; i < size ; i++)
+            for (int i = 0 ; i < max_count ; i++)
                 if (vmas[i].file)
                     put_handle(vmas[i].file);
             break;

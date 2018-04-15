@@ -100,7 +100,7 @@ void * shim_do_mmap (void * addr, size_t length, int prot, int flags, int fd,
         addr = bkeep_unmapped_heap(length, prot, flags, hdl, offset, NULL);
         /*
          * Let the library OS manages the address space. If we can't find
-         * propor space to allocate the memory, simply return failure.
+         * proper space to allocate the memory, simply return failure.
          */
         if (!addr)
             return (void *) -ENOMEM;
@@ -180,9 +180,15 @@ int shim_do_munmap (void * addr, size_t length)
         return -EFAULT;
     }
 
-    if (bkeep_munmap(addr, length, 0) < 0)
+    /* Protect first to make sure no overlapping with internal
+     * mappings */
+    if (bkeep_mprotect(addr, length, PROT_NONE, 0) < 0)
         return -EPERM;
 
     DkVirtualMemoryFree(addr, length);
+
+    if (bkeep_munmap(addr, length, 0) < 0)
+        bug();
+
     return 0;
 }
