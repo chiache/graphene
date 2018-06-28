@@ -277,8 +277,8 @@ static char * cpu_flags[]
           "pn",     // "processor serial number"
           "clflush",    // "CLFLUSH instruction"
           NULL,
-          "dts"     // "debug store"
-          "tm",     // "thermal monitor and clock ctrl"
+          "dts",    // "debug store"
+          "acpi",   // "Onboard thermal control"
           "mmx",    // "MMX Technology"
           "fxsr",   // "FXSAVE/FXRSTOR"
           "sse",    // "SSE extensions"
@@ -301,6 +301,8 @@ void _DkGetCPUInfo (PAL_CPU_INFO * ci)
     FOUR_CHARS_VALUE(&vendor_id[4], words[WORD_EDX]);
     FOUR_CHARS_VALUE(&vendor_id[8], words[WORD_ECX]);
     ci->cpu_vendor = vendor_id;
+    // Must be an Intel CPU
+    assert(!memcmp(vendor_id, "GenuineIntel", 12));
 
     char * brand = malloc(48);
     cpuid(0x80000002, 0, words);
@@ -310,6 +312,9 @@ void _DkGetCPUInfo (PAL_CPU_INFO * ci)
     cpuid(0x80000004, 0, words);
     memcpy(&brand[32], words, sizeof(unsigned int) * WORD_NUM);
     ci->cpu_brand = brand;
+
+    cpuid(4, 0, words);
+    ci->cpu_num      = BIT_EXTRACT_LE(words[WORD_EAX], 26, 32) + 1;
 
     cpuid(1, 0, words);
     ci->cpu_family   = BIT_EXTRACT_LE(words[WORD_EAX],  8, 12);
@@ -324,7 +329,7 @@ void _DkGetCPUInfo (PAL_CPU_INFO * ci)
 
     for (int i = 0 ; i < 32 ; i++) {
         if (!cpu_flags[i])
-            break;
+            continue;
 
         if (BIT_EXTRACT_LE(words[WORD_EDX], i, i + 1)) {
             int len = strlen(cpu_flags[i]);
