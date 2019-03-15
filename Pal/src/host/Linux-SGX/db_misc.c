@@ -200,3 +200,15 @@ int _DkCpuIdRetrieve (unsigned int leaf, unsigned int subleaf,
     add_cpuid_to_cache(leaf, subleaf, values);
     return 0;
 }
+
+int64_t _DkHostExtensionCall (PAL_HANDLE handle, PAL_NUM op, PAL_ARG* arg, int noutputs, PAL_ARG* outputs,
+                              int ninputs, PAL_ARG* inputs) {
+    // The handle needs to have at least one fd
+    if (!(HANDLE_HDR(handle)->flags & (RFD(0)|WFD(0))))
+        return -PAL_ERROR_BADHANDLE;
+
+    uint64_t retval = 0;
+    int ret = ocall_ioctl(handle->generic.fds[0], op, arg, noutputs, outputs,
+                          ninputs, inputs, &retval);
+    return (ret < 0) ? ret : retval;
+}

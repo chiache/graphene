@@ -509,4 +509,13 @@ PAL_NUM DkMemoryAvailableQuota (void);
 PAL_BOL
 DkCpuIdRetrieve (PAL_IDX leaf, PAL_IDX subleaf, PAL_IDX values[4]);
 
+typedef struct {
+    PAL_PTR val;
+    PAL_NUM size, off;
+} PAL_ARG;
+
+PAL_NUM
+DkHostExtensionCall (PAL_HANDLE handle, PAL_NUM op, PAL_ARG* arg, PAL_NUM noutputs, PAL_ARG* outputs,
+                     PAL_NUM ninputs, PAL_ARG* inputs);
+
 #endif /* PAL_H */

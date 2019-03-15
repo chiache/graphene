@@ -163,3 +163,28 @@ DkCpuIdRetrieve (PAL_IDX leaf, PAL_IDX subleaf, PAL_IDX values[4])
 
     LEAVE_PAL_CALL_RETURN(PAL_TRUE);
 }
+
+PAL_NUM DkHostExtensionCall (PAL_HANDLE handle, PAL_NUM op, PAL_ARG* arg, PAL_NUM noutputs, PAL_ARG* outputs,
+                             PAL_NUM ninputs, PAL_ARG* inputs)
+{
+    ENTER_PAL_CALL(DkHostExtensionCall);
+
+    if (!handle) {
+        _DkRaiseFailure(PAL_ERROR_INVAL);
+        LEAVE_PAL_CALL_RETURN(0);
+    }
+
+    if (UNKNOWN_HANDLE(handle)) {
+        _DkRaiseFailure(PAL_ERROR_BADHANDLE);
+        LEAVE_PAL_CALL_RETURN(0);
+    }
+
+    int64_t status = _DkHostExtensionCall(handle, op, arg, noutputs, outputs, ninputs, inputs);
+
+    if (status < 0) {
+        _DkRaiseFailure(-status);
+        status = 0;
+    }
+
+    LEAVE_PAL_CALL_RETURN(status);
+}

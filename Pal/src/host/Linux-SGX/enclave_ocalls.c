@@ -791,3 +791,35 @@ int ocall_load_debug(const char * command)
     OCALL_EXIT();
     return retval;
 }
+
+int ocall_ioctl (int fd, uint64_t op, PAL_ARG* arg, int noutputs, PAL_ARG* outputs,
+                 int ninputs, PAL_ARG* inputs, uint64_t* retval) {
+    int status = 0;
+    ms_ocall_ioctl_t* ms;
+    OCALLOC(ms, ms_ocall_ioctl_t*, sizeof(*ms));
+
+    ms->ms_fd = fd;
+    ms->ms_op = op;
+    OCALLOC(ms->ms_arg, void*, arg->size);
+    memcpy(ms->ms_arg, arg->val, arg->size);
+
+    for (int i = 0; i < noutputs; i++) {
+        void* newptr;
+        OCALLOC(newptr, void*, outputs[i].size);
+        memcpy(newptr, outputs[i].val, outputs[i].size);
+        *(void**) (((uintptr_t) ms->ms_arg) + outputs[i].off) = newptr;
+    }
+
+    status = SGX_OCALL(OCALL_IOCTL, ms);
+    if (!status) {
+        *retval = ms->ms_retval;
+
+        for (int i = 0; i < ninputs; i++) {
+            void* newptr = *(void**) (((uintptr_t) ms->ms_arg) + inputs[i].off);
+            memcpy(inputs[i].val, newptr, inputs[i].size);
+        }
+    }
+
+    OCALL_EXIT();
+    return status;
+}

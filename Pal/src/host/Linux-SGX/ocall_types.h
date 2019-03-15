@@ -55,6 +55,7 @@ enum {
     OCALL_RENAME,
     OCALL_DELETE,
     OCALL_LOAD_DEBUG,
+    OCALL_IOCTL,
     OCALL_NR,
 };
 
@@ -263,5 +264,12 @@ typedef struct {
 typedef struct {
     unsigned int ms_tid;
 } ms_ocall_schedule_t;
+
+typedef struct {
+    int      ms_fd;
+    uint64_t ms_op;
+    void*    ms_arg;
+    uint64_t ms_retval;
+} ms_ocall_ioctl_t;
 
 #pragma pack(pop)

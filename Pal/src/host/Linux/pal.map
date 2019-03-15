@@ -42,6 +42,7 @@ PAL {
         DkStreamChangeName;
         DkStreamAttributesSetbyHandle;
         DkMemoryAvailableQuota;
+        DkHostExtensionCall;
 
         # Debugging ABIs
         pal_printf; DkDebugAttachBinary; DkDebugDetachBinary;

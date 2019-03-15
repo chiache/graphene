@@ -103,3 +103,6 @@ int ocall_rename (const char * oldpath, const char * newpath);
 int ocall_delete (const char * pathname);
 
 int ocall_load_debug (const char * command);
+
+int ocall_ioctl (int fd, uint64_t op, PAL_ARG* arg, int noutputs, PAL_ARG* outputs,
+                 int ninputs, PAL_ARG* inputs, uint64_t* retval);
