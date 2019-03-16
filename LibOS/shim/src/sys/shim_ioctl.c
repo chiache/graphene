@@ -38,6 +38,7 @@
 #include <asm/ioctls.h>
 #include <asm/termios.h>
 #include <asm/termbits.h>
+#include <linux/ioctl.h>
 #include <linux/fd.h>
 #include <linux/sockios.h>
 
@@ -45,6 +46,8 @@
 #define TERM_DEFAULT_OFLAG (OPOST|ONLCR)
 #define TERM_DEFAULT_CFLAG (B38400|CS8|CREAD)
 #define TERM_DEFAULT_LFLAG (ICANON|ECHO|ECHOE|ECHOK|ECHOCTL|ECHOKE|IEXTEN)
+
+static int ioctl_passthru (struct shim_handle * hdl, unsigned int cmd, unsigned long arg);
 
 static int ioctl_termios (struct shim_handle * hdl, unsigned int cmd,
                           unsigned long arg)
@@ -491,10 +494,90 @@ done_fioread:
             break;
 
         default:
-            ret = -ENOSYS;
+            ret = ioctl_passthru(hdl, cmd, arg);
             break;
     }
 
     put_handle(hdl);
     return ret;
+}
+
+#define DUMMY_IOCTL_PRINT   _IOR('p', 0x01, struct dummy_print)
+
+struct dummy_print {
+    const char * str;
+    unsigned long size;
+};
+
+static int ioctl_passthru (struct shim_handle * hdl, unsigned int cmd, unsigned long arg) {
+    PAL_ARG* pal_arg = NULL;
+    PAL_NUM ninputs = 0, noutputs = 0;
+    PAL_ARG* inputs  = NULL;
+    PAL_ARG* outputs = NULL;
+
+    // Don't change these macros
+
+    #define SET_ARG_TYPE(type)                              \
+        do {                                                \
+            pal_arg = __alloca(sizeof(PAL_ARG));            \
+            pal_arg->val  = (PAL_PTR) arg;                  \
+            pal_arg->size = sizeof(type);                   \
+            pal_arg->off  = 0;                              \
+        } while (0)
+
+
+    #define SET_NOUTPUTS(num)                               \
+        do {                                                \
+            outputs = __alloca(sizeof(PAL_ARG) * (num));    \
+        } while (0)
+
+    #define ADD_OUTPUT_SIZE(type, field, fsize)             \
+        do {                                                \
+            type* __a = (void *) arg;                       \
+            outputs[noutputs].val  = (PAL_PTR) __a->field;  \
+            outputs[noutputs].size = (fsize);               \
+            outputs[noutputs].off  = offsetof(type, field); \
+            noutputs++;                                     \
+        } while (0)
+
+    #define SET_NINPUTS(num)                                \
+        do {                                                \
+            inputs = __alloca(sizeof(PAL_ARG) * (num));     \
+        } while (0)
+
+    #define ADD_INPUT_SIZE(type, field, fsize)              \
+        do {                                                \
+            type* __a = (void *) arg;                       \
+            inputs[ninputs].val  = (PAL_PTR) __a->field;    \
+            inputs[ninputs].size = (fsize);                 \
+            inputs[ninputs].off  = offsetof(type, field);   \
+            ninputs++;                                      \
+        } while (0)
+
+
+    // List the all ioctl opcodes allowed for passthrough
+    switch(cmd) {
+        // This is an example: DUMMY_IOCTL_PRINT will print out the string
+        // in the argument to the kernel log.
+        case DUMMY_IOCTL_PRINT: {
+            struct dummy_print* __arg = (void *) arg;
+            SET_ARG_TYPE(struct dummy_print);
+            SET_NOUTPUTS(1);
+            ADD_OUTPUT_SIZE(struct dummy_print, str, __arg->size);
+            // Specify input size if necessary
+            break;
+        }
+
+        // Start changing from here
+        // case IOCTL_OPCODE: ...
+    }
+
+    if (pal_arg != NULL) {
+        PAL_NATIVE_ERRNO = 0;
+        PAL_NUM retval = DkHostExtensionCall(hdl->pal_handle, cmd, pal_arg, noutputs, outputs,
+                                             ninputs, inputs);
+        return (PAL_NATIVE_ERRNO == 0) ? (int) retval : -PAL_ERRNO;
+    }
+
+    return -ENOSYS;
 }
