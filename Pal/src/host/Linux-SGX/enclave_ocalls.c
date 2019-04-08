@@ -800,23 +800,21 @@ int ocall_ioctl (int fd, uint64_t op, PAL_ARG* arg, int noutputs, PAL_ARG* outpu
 
     ms->ms_fd = fd;
     ms->ms_op = op;
-    OCALLOC(ms->ms_arg, void*, arg->size);
-    memcpy(ms->ms_arg, arg->val, arg->size);
+    ms->ms_arg = COPY_TO_USER(arg->val, arg->size);
 
     for (int i = 0; i < noutputs; i++) {
-        void* newptr;
-        OCALLOC(newptr, void*, outputs[i].size);
-        memcpy(newptr, outputs[i].val, outputs[i].size);
+        void* newptr = COPY_TO_USER(outputs[i].val, outputs[i].size);
         *(void**) (((uintptr_t) ms->ms_arg) + outputs[i].off) = newptr;
     }
 
     status = SGX_OCALL(OCALL_IOCTL, ms);
     if (!status) {
         *retval = ms->ms_retval;
+        COPY_FROM_USER(arg->val, ms->ms_arg, arg->size);
 
         for (int i = 0; i < ninputs; i++) {
             void* newptr = *(void**) (((uintptr_t) ms->ms_arg) + inputs[i].off);
-            memcpy(inputs[i].val, newptr, inputs[i].size);
+            COPY_FROM_USER(inputs[i].val, newptr, inputs[i].size);
         }
     }
 
