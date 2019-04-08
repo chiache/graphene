@@ -10,6 +10,7 @@
 #include <linux/version.h>
 #include <linux/highmem.h>
 #include <linux/miscdevice.h>
+#include <linux/mm.h>
 #include <linux/vmalloc.h>
 #include <linux/security.h>
 #include <asm/tlbflush.h>
@@ -68,9 +69,31 @@ int dummy_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+int dummy_fault(struct vm_fault *vmf)
+{
+	struct page *page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	if (!page)
+		return VM_FAULT_OOM;
+
+	vm_insert_pfn(vmf->vma, vmf->address, page_to_pfn(page));
+	return VM_FAULT_NOPAGE;
+}
+
+static const struct vm_operations_struct dummy_vm_ops = {
+	.fault		= dummy_fault,
+};
+
+int dummy_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	vma->vm_ops = &dummy_vm_ops;
+	vma->vm_flags |= VM_IO | VM_PFNMAP;
+	return 0;
+}
+
 static const struct file_operations dummy_fops = {
 	.owner		= THIS_MODULE,
 	.open		= dummy_open,
+	.mmap		= dummy_mmap,
 	.unlocked_ioctl	= dummy_ioctl,
 	.compat_ioctl	= dummy_ioctl,
 };
