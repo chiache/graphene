@@ -812,9 +812,14 @@ int ocall_ioctl (int fd, uint64_t op, PAL_ARG* arg, int noutputs, PAL_ARG* outpu
         *retval = ms->ms_retval;
         COPY_FROM_USER(arg->val, ms->ms_arg, arg->size);
 
+        for (int i = 0; i < noutputs; i++) {
+            *(void**) (((uintptr_t) arg->val) + outputs[i].off) = outputs[i].val;
+        }
+
         for (int i = 0; i < ninputs; i++) {
             void* newptr = *(void**) (((uintptr_t) ms->ms_arg) + inputs[i].off);
             COPY_FROM_USER(inputs[i].val, newptr, inputs[i].size);
+            assert(*(void**) (((uintptr_t) arg->val) + inputs[i].off) == inputs[i].val);
         }
     }
 
