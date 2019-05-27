@@ -104,7 +104,7 @@ $(GLIBC_SRC):
 	cd $(GLIBC_SRC) && \
 	for p in $(GLIBC_PATCHES); do \
 		echo applying $$p; \
-		patch -p1 < ../$$p; \
+		patch -p1 < ../$$p || exit 255; \
 	done
 endif
 
