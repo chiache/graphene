@@ -71,15 +71,18 @@ ifeq ($(shell git ls-files $(GLIBC_SRC)/configure),)
 GLIBC_PATCHES = \
 	$(GLIBC_SRC).patch \
 	glibc-syscalldb-api.patch \
-	glibc-liblibos.patch
+	glibc-liblibos.patch \
+	glibc-malloc-arena-size.patch
 
 GLIBC_PATCHES_2.19 = \
 	glibc-fix-warning.patch \
 	glibc-no-pie.patch \
-	glibc-liblibos-2.19.patch
+	glibc-liblibos-2.19.patch \
+	glibc-hp-timing-2.19.patch
 
 GLIBC_PATCHES_2.23 = \
-	glibc-liblibos-2.23+.patch
+	glibc-liblibos-2.23+.patch \
+	glibc-hp-timing-2.23+.patch
 
 # USE_clone_FOR_fork = true
 ifneq ($(USE_clone_FOR_fork),)
