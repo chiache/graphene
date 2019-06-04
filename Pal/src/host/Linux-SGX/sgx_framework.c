@@ -3,6 +3,7 @@
 
 #include <pal_linux.h>
 #include <pal_rtld.h>
+#include <pal_crypto.h>
 #include <hex.h>
 
 #include "sgx_internal.h"
@@ -488,7 +489,8 @@ failed:
 #define IAS_TEST_REPORT_URL \
     "https://test-as.sgx.trustedservices.intel.com:443/attestation/sgx/v3/report"
 
-int contact_intel_attest_service(const sgx_quote_nonce_t* nonce, const sgx_quote_t* quote) {
+int contact_intel_attest_service(const sgx_quote_nonce_t* nonce, const sgx_quote_t* quote,
+                                 const char** report) {
 
     int ret = 0;
     char* quote_str = base64_encode((uint8_t*)quote, sizeof(sgx_quote_t) + quote->sig_len, NULL);
@@ -613,9 +615,13 @@ int contact_intel_attest_service(const sgx_quote_nonce_t* nonce, const sgx_quote
         goto failed;
     }
 
+    SGX_DBG(DBG_S, "IAS report:     %s\n",  resp);
     SGX_DBG(DBG_S, "IAS signature:  %ld\n", ias_sig_len);
     SGX_DBG(DBG_S, "IAS cert:       %s\n",  ias_cert);
 
+    LIB_X509_CERT cert;
+    lib_X509LoadCert(&cert, ias_cert, strlen(ias_cert));
+    *report = resp;
     ret = 0;
 done:
     if (head) free(head);
@@ -682,7 +688,8 @@ int get_quote(const sgx_spid_t* spid, bool linkable, const sgx_arch_report_t* re
         goto failed;
     }
 
-    ret = contact_intel_attest_service(nonce, (sgx_quote_t *) r->quote.data);
+    const char* ias_report;
+    ret = contact_intel_attest_service(nonce, (sgx_quote_t *) r->quote.data, &ias_report);
     if (ret < 0)
         goto failed;
 

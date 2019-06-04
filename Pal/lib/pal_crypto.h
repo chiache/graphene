@@ -60,8 +60,10 @@ typedef struct AES LIB_AES_CONTEXT;
 #include "crypto/mbedtls/mbedtls/dhm.h"
 #include "crypto/mbedtls/mbedtls/rsa.h"
 #include "crypto/mbedtls/mbedtls/sha256.h"
+#include "crypto/mbedtls/mbedtls/x509_crt.h"
 
 typedef mbedtls_sha256_context LIB_SHA256_CONTEXT;
+typedef mbedtls_x509_crt LIB_X509_CERT;
 
 /* DH_SIZE is tied to the choice of parameters in mbedtls_dh.c. */
 #define DH_SIZE 256
@@ -130,5 +132,7 @@ int lib_RSAVerifySHA256(LIB_RSA_KEY *key, const uint8_t *signature,
 
 // Frees memory allocated in lib_RSAInitKey.
 int lib_RSAFreeKey(LIB_RSA_KEY *key);
+
+int lib_X509LoadCert(LIB_X509_CERT *cert, const char *buf, size_t len);
 
 #endif

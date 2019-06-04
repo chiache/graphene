@@ -251,3 +251,16 @@ int lib_RSAFreeKey(LIB_RSA_KEY *key)
     mbedtls_rsa_free(key);
     return 0;
 }
+
+int lib_X509LoadCert(LIB_X509_CERT *cert, const char *buf, size_t len)
+{
+    mbedtls_x509_crt_init(cert);
+    mbedtls_x509_crt_parse(cert, (const unsigned char *) buf, len);
+    return 0;
+}
+
+int lib_X509FreeCert(LIB_X509_CERT *cert)
+{
+    mbedtls_x509_crt_free(cert);
+    return 0;
+}

@@ -81,6 +81,7 @@ long strtol (const char *s, char **endptr, int base);
 int atoi (const char *nptr);
 long int atol (const char *nptr);
 
+char * strstr (const char *s, const char *t);
 char * strchr (const char *s, int c_in);
 
 void * memcpy (void *dstpp, const void *srcpp, size_t len);
