@@ -51,7 +51,7 @@ objs	= $(addprefix bookkeep/shim_,handle vma thread signal) \
 	  async parser debug object) syscallas start \
 	  $(patsubst %.c,%,$(wildcard sys/*.c))
 graphene_lib = .lib/graphene-lib.a
-pal_lib = $(RUNTIME_DIR)/libpal-$(PAL_HOST).so
+pal_lib = $(RUNTIME_DIR)/libpal-Skeleton.so
 headers = ../include/*.h ../../../Pal/lib/*.h ../../../Pal/include/pal/*.h
 
 all: $(files_to_build) $(files_to_install)
@@ -82,13 +82,15 @@ libsysdb_debug.so: $(addsuffix .o,$(filter-out syscallas,$(objs))) \
 	@echo [ $@ ]
 	$(LD) $(LDFLAGS-debug) -o $@ $(filter-out %.map %.lds,$^) -soname $@
 
-.lib/host_endian.h: ../../../Pal/src/host/$(PAL_HOST)/host_endian.h
+.lib/host_endian.h:
 	@mkdir -p .lib
-	$(call cmd,ln_sf)
+	echo "#include <endian.h>" > $@
 
-.PHONY: $(graphene_lib)
 $(graphene_lib): .lib/host_endian.h
 	$(MAKE) -C ../../../Pal/lib target=$(abspath .lib)/
+
+$(pal_lib):
+	$(MAKE) -C ../../../Pal/src PAL_HOST=Skeleton
 
 libsysdb.a: $(addsuffix .o,$(objs))
 	@echo [ $@ ]
