@@ -2,6 +2,7 @@
 /generated-offsets.s
 /generated_offsets.py
 /pal-sgx
+/pal.map
 
 *.pem
 *.pub
