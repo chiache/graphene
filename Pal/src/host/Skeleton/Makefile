@@ -4,7 +4,7 @@ include Makefile.am
 CFLAGS  += -I. -I../.. -I../../../include -I../../../lib
 ASFLAGS += -I. -I../.. -I../../../include
 
-host_target = libpal-Skeleton.a
+host_files = libpal-Skeleton.a pal.map
 
 defs	= -DIN_PAL
 objs	= $(addprefix db_,files devices pipes sockets streams memory threading \
@@ -12,8 +12,7 @@ objs	= $(addprefix db_,files devices pipes sockets streams memory threading \
 graphene_lib = ../../../lib/graphene-lib.a
 headers	= $(wildcard *.h) $(wildcard ../../*.h) $(wildcard ../../../lib/*.h)
 
-.PHONY: all
-all: $(host_target)
+all: $(host_files)
 
 ifeq ($(DEBUG),1)
 CC += -gdwarf-2 -g3
@@ -27,6 +26,9 @@ endif
 libpal-Skeleton.a: $(addsuffix .o,$(objs)) $(graphene_lib)
 	@echo [ host/$(PAL_HOST)/$@ ]
 	@$(AR) $(ARFLAGS) $@ $^
+
+pal.map: pal.map.template ../../pal-symbols
+	sed -e 's:\$$(PAL_SYMBOLS):$(shell sed -e 's:$$:;:g' ../../pal-symbols):g' $< > $@
 
 %.asm: %.c $(headers)
 	$(CC) $(CFLAGS) $(defs) -c $< -o $<.o
@@ -43,4 +45,4 @@ libpal-Skeleton.a: $(addsuffix .o,$(objs)) $(graphene_lib)
 
 .PHONY: clean
 clean:
-	rm -f $(addsuffix .o,$(objs)) $(host_target)
+	rm -f $(addsuffix .o,$(objs)) $(host_files)
