@@ -35,17 +35,21 @@ ifeq ($(WERROR),1)
 CFLAGS += -Werror
 endif
 
+include ../../Makefile.rules
+
 manifest_rules = \
-	-e 's:\$$(PAL):$(abspath ../../Runtime/pal_loader):g' \
-	-e 's:\$$(PWD):$(shell pwd)/:g' \
+	$(call sed_sub,PAL,$(abspath ../../Runtime/pal_loader)) \
+	$(call sed_sub,PWD,$(shell pwd)/) \
 	$(extra_rules)
 
 manifest: manifest.template
-	sed $(manifest_rules) $< >$@
+	@echo [ $@ ]
+	@$(call sed,$(manifest_rules))
 
 %.manifest: %.manifest.template $(executables) $(pal_lib)
-	sed $(manifest_rules) $< >$@
-	(grep -q "#\!" $@ && chmod +x $@) || true
+	@echo [ $@ ]
+	@$(call sed,$(manifest_rules))
+	@(grep -q "#\!" $@ && chmod +x $@) || true
 
 ../src/user_shared_start.o ../src/user_start.o: ../src/user_start.S
 	$(MAKE) -C ../src $(notdir $@)

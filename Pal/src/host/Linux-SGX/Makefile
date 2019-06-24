@@ -35,8 +35,13 @@ libpal-Linux-SGX.a: $(addsuffix .o,$(enclave-objs) $(enclave-asm-objs))
 	@echo [ host/Linux-SGX/$@ ]
 	$(AR) $(ARFLAGS) $@ $^
 
+include ../../../../Makefile.rules
+
+sed_rules = $(call sed_sub,PAL_SYMBOLS,$(shell sed -e 's:$$:;:g' ../../pal-symbols))
+
 pal.map: pal.map.template ../../pal-symbols
-	sed -e 's:\$$(PAL_SYMBOLS):$(shell sed -e 's:$$:;:g' ../../pal-symbols):g' $< > $@
+	@echo [ host/Linux-SGX/$@ ]
+	@$(call sed,$(sed_rules))
 
 $(addsuffix .o,$(enclave-objs)): %.o: %.c $(headers)
 	@echo [ host/Linux-SGX/$@ ]

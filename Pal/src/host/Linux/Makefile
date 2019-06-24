@@ -19,7 +19,6 @@ objs	= $(addprefix db_,files devices pipes sockets streams memory threading \
 graphene_lib = .lib/graphene-lib.a
 headers	= $(wildcard *.h) $(wildcard ../../*.h) $(wildcard ../../../lib/*.h)
 
-.PHONY: all
 all: $(host_files)
 
 ifeq ($(DEBUG),1)
@@ -32,8 +31,13 @@ libpal-Linux.a: $(addsuffix .o,$(objs)) $(graphene_lib)
 	@echo [ host/Linux/$@ ]
 	@$(AR) $(ARFLAGS) $@ $^
 
+include ../../../../Makefile.rules
+
+sed_rules = $(call sed_sub,PAL_SYMBOLS,$(shell sed -e 's:$$:;:g' ../../pal-symbols))
+
 pal.map: pal.map.template ../../pal-symbols
-	sed -e 's:\$$(PAL_SYMBOLS):$(shell sed -e 's:$$:;:g' ../../pal-symbols):g' $< > $@
+	@echo [ host/Linux/$@ ]
+	@$(call sed,$(sed_rules))
 
 %.asm: %.c $(headers)
 	$(CC) $(CFLAGS) $(defs) -c $< -o $<.o

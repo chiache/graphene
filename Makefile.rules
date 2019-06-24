@@ -64,3 +64,6 @@ cc-option = $(shell set -e; \
 	if ($(CC) -Werror $(1) -c -x c /dev/null -o /dev/null) >/dev/null 2>&1; \
 	then echo "$(1)"; \
 	fi)
+
+sed_sub = -e 's:$$($1):$2:g'
+sed = sed $1 $< > $@

@@ -40,38 +40,40 @@ ifeq ($(WERROR),1)
 CFLAGS += -Werror
 endif
 
-ifeq ($(ABSPATH_IN_MANIFEST),yes)
+include $(level)../../../Makefile.rules
+
 manifest_rules = \
-	-e 's:\$$(PAL):$(abspath $(RUNTIME))/$(PAL_LOADER):g' \
-	-e 's:\$$(PWD):$(PWD):g' \
-	-e 's:\$$(BIN):$(subst .manifest,,$(notdir $@)):g' \
-	-e 's:\$$(SHIMPATH):$(abspath $(RUNTIME))/libsysdb.so:g' \
-	-e 's:\$$(LIBCDIR):$(abspath $(RUNTIME)):g' \
-	$(extra_rules)
+	$(call sed_sub,PAL,$(abspath $(RUNTIME))/$(PAL_LOADER)) \
+	$(call sed_sub,PWD,$(shell pwd)) \
+
+ifeq ($(ABSPATH_IN_MANIFEST),yes)
+manifest_rules += \
+	$(call sed_sub,BIN,$(subst .manifest,,$(notdir $@))) \
+	$(call sed_sub,SHIMPATH,$(abspath $(RUNTIME))/libsysdb.so) \
+	$(call sed_sub,LIBCDIR,$(abspath $(RUNTIME)))
 else
-manifest_rules= \
-	-e 's:\$$(PAL):$(abspath $(RUNTIME))/$(PAL_LOADER):g' \
-	-e 's:\$$(PWD):$(PWD):g' \
-	-e 's:\$$(BIN):$(subst .manifest,,$(notdir $@)):g' \
-	-e 's:\$$(SHIMPATH):'$$RELDIR'$(RUNTIME)/libsysdb.so:g' \
-	-e 's:\$$(LIBCDIR):'$$RELDIR'$(RUNTIME):g' \
-	$(extra_rules)
+manifest_rules += \
+	$(call sed_sub,BIN,$(subst .manifest,,$(notdir $@))) \
+	$(call sed_sub,SHIMPATH,'$$RELDIR'$(RUNTIME)/libsysdb.so) \
+	$(call sed_sub,LIBCDIR,'$$RELDIR'$(RUNTIME))
 endif
 
-pal_loader:
-	ln -sf $(RUNTIME)/pal_loader
+manifest_rules += $(extra_rules)
+
+pal_loader: $(RUNTIME)/pal_loader
+	$(call cmd,ln_sf)
 
 relative-to = $(shell python -c "import os.path; print os.path.relpath(\"$(abspath $2)\",\"$(abspath $1)\")")
 
 %manifest: %manifest.template
 	@echo [ $@ ]
-	RELDIR=$(filter-out ./,$(call relative-to,$(dir $@),$(shell pwd))/) && \
-	sed $(manifest_rules) $< > $@
-	(grep -q '^#!' $@ && chmod +x $@) || true
+	@RELDIR=$(filter-out ./,$(call relative-to,$(dir $@),$(shell pwd))/) && \
+	$(call sed,$(manifest_rules))
+	@(grep -q '^#!' $@ && chmod +x $@) || true
 
 manifest: manifest.template
 	@echo [ $@ ]
-	sed $(manifest_rules) $< > $@
+	@$(call sed,$(manifest_rules))
 
 .PHONY: clean
 clean: $(clean-extra) $(if $(level),,clean-subdirs)

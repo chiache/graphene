@@ -30,8 +30,13 @@ libpal-FreeBSD.a: $(addsuffix .o,$(objs)) $(graphene_lib)
 	@echo [ host/FreeBSD/$@ ]
 	@$(AR) $(ARFLAGS) $@ $^
 
+include ../../../../Makefile.rules
+
+sed_rules = $(call sed_sub,PAL_SYMBOLS,$(shell sed -e 's:$$:;:g' ../../pal-symbols))
+
 pal.map: pal.map.template ../../pal-symbols
-	sed -e 's:\$$(PAL_SYMBOLS):$(shell sed -e 's:$$:;:g' ../../pal-symbols):g' $< > $@
+	@echo [ host/FreeBSD/$@ ]
+	@$(call sed,$(sed_rules))
 
 %.asm: %.c $(headers)
 	$(CC) $(CFLAGS) $(defs) -c $< -o $<.o
