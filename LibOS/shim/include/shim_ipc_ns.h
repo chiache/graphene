@@ -26,16 +26,16 @@
 #include <shim_types.h>
 #include <shim_internal.h>
 
-#define IPC_NS_CALLBACKS(ns)                        \
-    /* FINDNS   */ &ipc_##ns##_findns_callback,     \
-    /* TELLNS   */ &ipc_##ns##_tellns_callback,     \
-    /* LEASE    */ &ipc_##ns##_lease_callback,      \
-    /* OFFER    */ &ipc_##ns##_offer_callback,      \
-    /* RENEW    */ &ipc_##ns##_renew_callback,      \
-    /* SUBLEASE */ &ipc_##ns##_sublease_callback,   \
-    /* QUERY    */ &ipc_##ns##_query_callback,      \
-    /* QUERYALL */ &ipc_##ns##_queryall_callback,   \
-    /* ANSWER   */ &ipc_##ns##_answer_callback,
+#define IPC_NS_CALLBACKS(ns_cap, ns)                \
+    [ IPC_##ns_cap##_FINDNS ]   = &ipc_##ns##_findns_callback,     \
+    [ IPC_##ns_cap##_TELLNS ]   = &ipc_##ns##_tellns_callback,     \
+    [ IPC_##ns_cap##_LEASE ]    = &ipc_##ns##_lease_callback,      \
+    [ IPC_##ns_cap##_OFFER ]    = &ipc_##ns##_offer_callback,      \
+    [ IPC_##ns_cap##_RENEW ]    = &ipc_##ns##_renew_callback,      \
+    [ IPC_##ns_cap##_SUBLEASE ] = &ipc_##ns##_sublease_callback,   \
+    [ IPC_##ns_cap##_QUERY ]    = &ipc_##ns##_query_callback,      \
+    [ IPC_##ns_cap##_QUERYALL ] = &ipc_##ns##_queryall_callback,   \
+    [ IPC_##ns_cap##_ANSWER ]   = &ipc_##ns##_answer_callback,
 
 
 #define IPC_NS_KEY_CALLBACKS(ns)                    \

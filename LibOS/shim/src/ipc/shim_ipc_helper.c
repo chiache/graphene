@@ -665,40 +665,40 @@ static int ipc_resp_callback (IPC_CALLBACK_ARGS)
 }
 
 static ipc_callback ipc_callbacks [IPC_CODE_NUM] = {
-    /* RESP             */  &ipc_resp_callback,
-    /* FINDURI          */  &ipc_finduri_callback,
-    /* TELLURI          */  &ipc_telluri_callback,
-    /* CHECKPOINT       */  &ipc_checkpoint_callback,
+    [ IPC_RESP ]          = &ipc_resp_callback,
+    [ IPC_FINDURI ]       = &ipc_finduri_callback,
+    [ IPC_TELLURI ]       = &ipc_telluri_callback,
+    [ IPC_CHECKPOINT ]    = &ipc_checkpoint_callback,
 
     /* parents and children */
-    /* CLD_EXIT         */  &ipc_cld_exit_callback,
-    /* CLD_JOIN         */  &ipc_cld_join_callback,
+    [ IPC_CLD_EXIT ]      = &ipc_cld_exit_callback,
+    [ IPC_CLD_JOIN ]      = &ipc_cld_join_callback,
 #ifdef PROFILE
-    /* CLD_PROFILE      */  &ipc_cld_profile_callback,
+    [ IPC_CLD_PROFILE ]   = &ipc_cld_profile_callback,
 #endif
 
     /* pid namespace */
-    IPC_NS_CALLBACKS(pid)
-    /* PID_KILL         */  &ipc_pid_kill_callback,
-    /* PID_GETSTATUS    */  &ipc_pid_getstatus_callback,
-    /* PID_RETSTATUS    */  &ipc_pid_retstatus_callback,
-    /* PID_GETMETA      */  &ipc_pid_getmeta_callback,
-    /* PID_RETMETA      */  &ipc_pid_retmeta_callback,
-    /* PID_NOP          */  &ipc_pid_nop_callback,
-    /* PID_SENDRPC      */  &ipc_pid_sendrpc_callback,
+    IPC_NS_CALLBACKS(PID, pid)
+    [ IPC_PID_KILL ]      = &ipc_pid_kill_callback,
+    [ IPC_PID_GETSTATUS ] = &ipc_pid_getstatus_callback,
+    [ IPC_PID_RETSTATUS ] = &ipc_pid_retstatus_callback,
+    [ IPC_PID_GETMETA ]   = &ipc_pid_getmeta_callback,
+    [ IPC_PID_RETMETA ]   = &ipc_pid_retmeta_callback,
+    [ IPC_PID_NOP ]       = &ipc_pid_nop_callback,
+    [ IPC_PID_SENDRPC ]   = &ipc_pid_sendrpc_callback,
 
     /* sysv namespace */
-    IPC_NS_CALLBACKS(sysv)
+    IPC_NS_CALLBACKS(SYSV, sysv)
     IPC_NS_KEY_CALLBACKS(sysv)
-    /* SYSV_DELRES      */  &ipc_sysv_delres_callback,
-    /* SYSV_MOVRES      */  &ipc_sysv_movres_callback,
-    /* SYSV_MSGSND      */  &ipc_sysv_msgsnd_callback,
-    /* SYSV_MSGRCV      */  &ipc_sysv_msgrcv_callback,
-    /* SYSV_MSGMOV      */  &ipc_sysv_msgmov_callback,
-    /* SYSV_SEMOP       */  &ipc_sysv_semop_callback,
-    /* SYSV_SEMCTL      */  &ipc_sysv_semctl_callback,
-    /* SYSV_SEMRET      */  &ipc_sysv_semret_callback,
-    /* SYSV_SEMMOV      */  &ipc_sysv_semmov_callback,
+    [ IPC_SYSV_DELRES ]   = &ipc_sysv_delres_callback,
+    [ IPC_SYSV_MOVRES ]   = &ipc_sysv_movres_callback,
+    [ IPC_SYSV_MSGSND ]   = &ipc_sysv_msgsnd_callback,
+    [ IPC_SYSV_MSGRCV ]   = &ipc_sysv_msgrcv_callback,
+    [ IPC_SYSV_MSGMOV ]   = &ipc_sysv_msgmov_callback,
+    [ IPC_SYSV_SEMOP ]    = &ipc_sysv_semop_callback,
+    [ IPC_SYSV_SEMCTL ]   = &ipc_sysv_semctl_callback,
+    [ IPC_SYSV_SEMRET ]   = &ipc_sysv_semret_callback,
+    [ IPC_SYSV_SEMMOV ]   = &ipc_sysv_semmov_callback,
 };
 
 int __response_ipc_message (struct shim_ipc_port * port, IDTYPE dest,
