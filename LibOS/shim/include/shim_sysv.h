@@ -138,7 +138,7 @@ struct msg_backup {
 struct shim_msg_handle;
 
 int add_msg_handle (key_t key, IDTYPE id, mode_t perm, bool owned);
-int del_msg_handle (struct shim_msg_handle * msgq);
+int del_msg_handle(struct shim_msg_handle* msgq, uid_t caller);
 
 struct shim_msg_handle * get_msg_handle_by_key (key_t key);
 struct shim_msg_handle * get_msg_handle_by_id (IDTYPE id);
@@ -214,7 +214,7 @@ int add_sem_handle (key_t key, IDTYPE id, size_t nsems, mode_t mode, bool owned)
 struct shim_sem_handle * get_sem_handle_by_key (key_t key);
 struct shim_sem_handle * get_sem_handle_by_id (IDTYPE semid);
 void put_sem_handle (struct shim_sem_handle * sem);
-int del_sem_handle (struct shim_sem_handle * sem);
+int del_sem_handle(struct shim_sem_handle* sem, uid_t caller);
 
 int recover_sem_ownership (struct shim_sem_handle * sem,
                            struct sem_backup * backups, int nbackups,

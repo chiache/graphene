@@ -341,10 +341,11 @@ enum {
 struct shim_ipc_sysv_delres {
     IDTYPE resid;
     enum sysv_type type;
+    uid_t caller;
 } __attribute__((packed));
 
 int ipc_sysv_delres_send (struct shim_ipc_port * port, IDTYPE dest,
-                          IDTYPE resid, enum sysv_type type);
+                          IDTYPE resid, enum sysv_type type, uid_t caller);
 int ipc_sysv_delres_callback (IPC_CALLBACK_ARGS);
 
 /* SYSV_MOVRES */

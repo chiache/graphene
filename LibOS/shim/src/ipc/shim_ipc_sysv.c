@@ -57,7 +57,7 @@ DEFINE_PROFILE_INTERVAL(ipc_sysv_delres_send, ipc);
 DEFINE_PROFILE_INTERVAL(ipc_sysv_delres_callback, ipc);
 
 int ipc_sysv_delres_send (struct shim_ipc_port * port, IDTYPE dest,
-                          IDTYPE resid, enum sysv_type type)
+                          IDTYPE resid, enum sysv_type type, uid_t caller)
 {
     BEGIN_PROFILE_INTERVAL();
     int ret = 0;
@@ -77,11 +77,12 @@ int ipc_sysv_delres_send (struct shim_ipc_port * port, IDTYPE dest,
                         dest);
         struct shim_ipc_sysv_delres * msgin = (struct shim_ipc_sysv_delres *)
             &msg->msg;
-        msgin->resid = resid;
-        msgin->type  = type;
+        msgin->resid  = resid;
+        msgin->type   = type;
+        msgin->caller = caller;
 
-        debug("ipc send to %u: IPC_SYSV_DELRES(%u, %s)\n", dest, resid,
-              SYSV_TYPE_STR(type));
+        debug("ipc send to %u: IPC_SYSV_DELRES(%u, %s, %d)\n", dest, resid,
+              SYSV_TYPE_STR(type), caller);
 
         ret = send_ipc_message(msg, port);
         goto out;
@@ -96,8 +97,8 @@ int ipc_sysv_delres_send (struct shim_ipc_port * port, IDTYPE dest,
     msgin->resid = resid;
     msgin->type  = type;
 
-    debug("ipc send to %u: IPC_SYSV_DELRES(%u, %s)\n", dest, resid,
-          SYSV_TYPE_STR(type));
+    debug("ipc send to %u: IPC_SYSV_DELRES(%u, %s, %d)\n", dest, resid,
+          SYSV_TYPE_STR(type), caller);
 
     ret = do_ipc_duplex(msg, port, NULL, NULL);
     put_ipc_port(port);
@@ -115,8 +116,8 @@ int ipc_sysv_delres_callback (IPC_CALLBACK_ARGS)
     struct shim_ipc_sysv_delres * msgin  =
                        (struct shim_ipc_sysv_delres *) &msg->msg;
 
-    debug("ipc callback from %u: IPC_SYSV_DELRES(%u, %s)\n", msg->src,
-          msgin->resid, SYSV_TYPE_STR(msgin->type));
+    debug("ipc callback from %u: IPC_SYSV_DELRES(%u, %s, %d)\n", msg->src,
+          msgin->resid, SYSV_TYPE_STR(msgin->type), msgin->caller);
 
     bool owned = false;
     ret = -ENOENT;
@@ -126,7 +127,7 @@ int ipc_sysv_delres_callback (IPC_CALLBACK_ARGS)
             if (!msgq)
                 goto out;
             owned = msgq->owned;
-            ret = del_msg_handle(msgq);
+            ret = del_msg_handle(msgq, msgin->caller);
             break;
         }
         case SYSV_SEM: {
@@ -134,7 +135,7 @@ int ipc_sysv_delres_callback (IPC_CALLBACK_ARGS)
             if (!sem)
                 goto out;
             owned = sem->owned;
-            ret = del_sem_handle(sem);
+            ret = del_sem_handle(sem, msgin->caller);
             break;
         }
         default:

@@ -209,10 +209,16 @@ void put_sem_handle (struct shim_sem_handle * sem)
     put_handle(SEM_TO_HANDLE(sem));
 }
 
-static int __del_sem_handle (struct shim_sem_handle * sem)
-{
+static int __del_sem_handle(struct shim_sem_handle* sem, uid_t caller) {
     if (sem->deleted)
         return 0;
+
+    if (sem->owned) {
+        assert(sem->semstat);
+        if (caller != sem->semstat->sem_perm.uid &&
+            caller != sem->semstat->sem_perm.cuid)
+            return -EPERM;
+    }
 
     sem->deleted = true;
 
@@ -237,11 +243,10 @@ static int __del_sem_handle (struct shim_sem_handle * sem)
     return 0;
 }
 
-int del_sem_handle (struct shim_sem_handle * sem)
-{
+int del_sem_handle(struct shim_sem_handle* sem, uid_t caller) {
     struct shim_handle * hdl = SEM_TO_HANDLE(sem);
     lock(&hdl->lock);
-    int ret = del_sem_handle(sem);
+    int ret = __del_sem_handle(sem, caller);
     unlock(&hdl->lock);
     return ret;
 }
@@ -454,12 +459,12 @@ int shim_do_semctl (int semid, int semnum, int cmd, unsigned long arg)
     switch (cmd) {
         case IPC_RMID: {
             if (!sem->owned) {
-                ret = ipc_sysv_delres_send(NULL, 0, semid, SYSV_SEM);
+                ret = ipc_sysv_delres_send(NULL, 0, semid, SYSV_SEM, cur_thread->euid);
                 if (ret < 0)
                     goto out;
             }
 
-            __del_sem_handle(sem);
+            __del_sem_handle(sem, cur_thread->euid);
             goto out;
         }
 
@@ -805,7 +810,7 @@ int submit_sysv_sem (struct shim_sem_handle * sem, struct sembuf * sops,
         }
 
         ret = ipc_sysv_delres_send(client->port, client->vmid, sem->semid,
-                                   SYSV_SEM);
+                                   SYSV_SEM, 0);
         goto out_locked;
     }
 

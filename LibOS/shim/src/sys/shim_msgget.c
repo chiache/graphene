@@ -243,10 +243,16 @@ static void __free_msg_linked_qobjs (struct shim_msg_handle * msgq, void * obj)
     }
 }
 
-static int __del_msg_handle (struct shim_msg_handle * msgq)
-{
+static int __del_msg_handle(struct shim_msg_handle* msgq, uid_t caller) {
     if (msgq->deleted)
         return -EIDRM;
+
+    if (msgq->owned) {
+        assert(msgq->msqstat);
+        if (caller != msgq->msqstat->msg_perm.uid &&
+            caller != msgq->msqstat->msg_perm.cuid)
+            return -EPERM;
+    }
 
     msgq->deleted = true;
     free(msgq->queue);
@@ -280,11 +286,10 @@ static int __del_msg_handle (struct shim_msg_handle * msgq)
     return 0;
 }
 
-int del_msg_handle (struct shim_msg_handle * msgq)
-{
+int del_msg_handle(struct shim_msg_handle* msgq, uid_t caller) {
     struct shim_handle * hdl = MSG_TO_HANDLE(msgq);
     lock(&hdl->lock);
-    int ret = __del_msg_handle(msgq);
+    int ret = __del_msg_handle(msgq, caller);
     unlock(&hdl->lock);
     return ret;
 }
@@ -508,12 +513,12 @@ int shim_do_msgctl (int msqid, int cmd, struct msqid_ds * buf)
     switch (cmd) {
         case IPC_RMID:
             if (!msgq->owned) {
-                ret = ipc_sysv_delres_send(NULL, 0, msgq->msqid, SYSV_MSGQ);
+                ret = ipc_sysv_delres_send(NULL, 0, msgq->msqid, SYSV_MSGQ, cur_thread->euid);
                 if (ret < 0)
                     break;
             }
 
-            __del_msg_handle(msgq);
+            __del_msg_handle(msgq, cur_thread->euid);
             break;
 
         case IPC_STAT:
