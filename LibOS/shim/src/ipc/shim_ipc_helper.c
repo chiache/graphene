@@ -692,13 +692,17 @@ static ipc_callback ipc_callbacks [IPC_CODE_NUM] = {
     IPC_NS_KEY_CALLBACKS(sysv)
     [ IPC_SYSV_DELRES ]   = &ipc_sysv_delres_callback,
     [ IPC_SYSV_MOVRES ]   = &ipc_sysv_movres_callback,
+    [ IPC_SYSV_SETPERM ]  = &ipc_sysv_setperm_callback,
+    [ IPC_SYSV_GETSTAT ]  = &ipc_sysv_getstat_callback,
     [ IPC_SYSV_MSGSND ]   = &ipc_sysv_msgsnd_callback,
     [ IPC_SYSV_MSGRCV ]   = &ipc_sysv_msgrcv_callback,
     [ IPC_SYSV_MSGMOV ]   = &ipc_sysv_msgmov_callback,
+    [ IPC_SYSV_MSGSTAT ]  = &ipc_sysv_msgstat_callback,
     [ IPC_SYSV_SEMOP ]    = &ipc_sysv_semop_callback,
     [ IPC_SYSV_SEMCTL ]   = &ipc_sysv_semctl_callback,
     [ IPC_SYSV_SEMRET ]   = &ipc_sysv_semret_callback,
     [ IPC_SYSV_SEMMOV ]   = &ipc_sysv_semmov_callback,
+    [ IPC_SYSV_SEMSTAT ]  = &ipc_sysv_semstat_callback,
 };
 
 int __response_ipc_message (struct shim_ipc_port * port, IDTYPE dest,

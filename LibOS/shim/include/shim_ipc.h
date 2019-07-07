@@ -319,13 +319,17 @@ struct sysv_key {
 enum {
     IPC_SYSV_DELRES = IPC_SYSV_TEMPLATE_BOUND,
     IPC_SYSV_MOVRES,
+    IPC_SYSV_SETPERM,
+    IPC_SYSV_GETSTAT,
     IPC_SYSV_MSGSND,
     IPC_SYSV_MSGRCV,
     IPC_SYSV_MSGMOV,
+    IPC_SYSV_MSGSTAT,
     IPC_SYSV_SEMOP,
     IPC_SYSV_SEMCTL,
     IPC_SYSV_SEMRET,
     IPC_SYSV_SEMMOV,
+    IPC_SYSV_SEMSTAT,
 #ifdef USE_SHARED_SEMAPHORE
     IPC_SYSV_SEMQUERY,
     IPC_SYSV_SEMREPLY,
@@ -357,27 +361,51 @@ int ipc_sysv_movres_send (struct sysv_client * client, IDTYPE owner,
                           enum sysv_type type);
 int ipc_sysv_movres_callback (IPC_CALLBACK_ARGS);
 
+/* SYSV_SETPERM */
+struct shim_ipc_sysv_setperm {
+    IDTYPE resid;
+    enum sysv_type type;
+    uid_t caller;
+    uid_t uid;
+    gid_t gid;
+    mode_t mode;
+} __attribute__((packed));
+
+int ipc_sysv_setperm_send(IDTYPE resid, enum sysv_type type, uid_t caller, uid_t uid, gid_t gid, mode_t mode);
+int ipc_sysv_setperm_callback(IPC_CALLBACK_ARGS);
+
+/* SYSV_GETSTAT */
+struct shim_ipc_sysv_getstat {
+    IDTYPE resid;
+    enum sysv_type type;
+} __attribute__((packed));
+
+int ipc_sysv_getstat_send(IDTYPE resid, enum sysv_type type, void* buf);
+int ipc_sysv_getstat_callback(IPC_CALLBACK_ARGS);
+
 /* SYSV_MSGSND */
 struct shim_ipc_sysv_msgsnd {
     IDTYPE msgid;
+    IDTYPE pid;
     long msgtype;
     char msg[];
 } __attribute__((packed));
 
 int ipc_sysv_msgsnd_send (struct shim_ipc_port * port, IDTYPE dest,
-                          IDTYPE msgid, long msgtype,
+                          IDTYPE msgid, IDTYPE pid, long msgtype,
                           const void * buf, size_t size, unsigned long seq);
 int ipc_sysv_msgsnd_callback (IPC_CALLBACK_ARGS);
 
 /* SYSV_MSGRCV */
 struct shim_ipc_sysv_msgrcv {
     IDTYPE msgid;
+    IDTYPE pid;
     long msgtype;
     size_t size;
     int flags;
 } __attribute__((packed));
 
-int ipc_sysv_msgrcv_send (IDTYPE msgid, long msgtype, int flags, void * buf,
+int ipc_sysv_msgrcv_send (IDTYPE msgid, IDTYPE pid, long msgtype, int flags, void * buf,
                           size_t size);
 int ipc_sysv_msgrcv_callback (IPC_CALLBACK_ARGS);
 
@@ -393,6 +421,16 @@ int ipc_sysv_msgmov_send (struct shim_ipc_port * port, IDTYPE dest,
                           IDTYPE msgid, LEASETYPE lease,
                           struct sysv_score * scores, int nscores);
 int ipc_sysv_msgmov_callback (IPC_CALLBACK_ARGS);
+
+/* SYSV_MSGSTAT */
+struct shim_ipc_sysv_msgstat {
+    IDTYPE msgid;
+    struct msqid_ds stat;
+} __attribute__((packed));
+
+int ipc_sysv_msgstat_send(struct shim_ipc_port* port, IDTYPE dest, IDTYPE msgid,
+                          struct msqid_ds* stat, unsigned long seq);
+int ipc_sysv_msgstat_callback(IPC_CALLBACK_ARGS);
 
 /* SYSV_SEMOP */
 struct shim_ipc_sysv_semop {
@@ -411,14 +449,13 @@ int ipc_sysv_semop_callback (IPC_CALLBACK_ARGS);
 /* SYSV_SEMCTL */
 struct shim_ipc_sysv_semctl {
     IDTYPE semid;
-    int semnum;
+    size_t semnum;
     int cmd;
     size_t valsize;
     unsigned char vals[];
 } __attribute__((packed));
 
-int ipc_sysv_semctl_send (IDTYPE semid, int semnum, int cmd, void * vals,
-                          size_t valsize);
+int ipc_sysv_semctl_send (IDTYPE semid, size_t semnum, int cmd, void* vals, size_t valsize);
 int ipc_sysv_semctl_callback (IPC_CALLBACK_ARGS);
 
 /* SYSV_SEMRET */
@@ -435,16 +472,25 @@ int ipc_sysv_semret_callback (IPC_CALLBACK_ARGS);
 struct shim_ipc_sysv_semmov {
     IDTYPE semid;
     LEASETYPE lease;
-    unsigned short nsems, nsrcs, nscores;
+    size_t nsems, nsrcs, nscores;
     struct sem_backup sems[];
 } __attribute__((packed));
 
-int ipc_sysv_semmov_send (struct shim_ipc_port * port, IDTYPE dest,
-                          IDTYPE semid, LEASETYPE lease,
-                          struct sem_backup * sems, int nsems,
-                          struct sem_client_backup * srcs, int nsrcs,
-                          struct sysv_score * scores, int nscores);
+int ipc_sysv_semmov_send (struct shim_ipc_port* port, IDTYPE dest, IDTYPE semid, LEASETYPE lease,
+                          struct sem_backup* sems, size_t nsems,
+                          struct sem_client_backup* srcs, size_t nsrcs,
+                          struct sysv_score* scores, size_t nscores);
 int ipc_sysv_semmov_callback (IPC_CALLBACK_ARGS);
+
+/* SYSV_SEMSTAT */
+struct shim_ipc_sysv_semstat {
+    IDTYPE semid;
+    struct semid_ds stat;
+} __attribute__((packed));
+
+int ipc_sysv_semstat_send(struct shim_ipc_port* port, IDTYPE dest, IDTYPE semid,
+                          struct semid_ds* stat, unsigned long seq);
+int ipc_sysv_semstat_callback(IPC_CALLBACK_ARGS);
 
 #ifdef USE_SHARED_SEMAPHORE
 /* SYSV_SEMQUERY */
@@ -452,19 +498,18 @@ struct shim_ipc_sysv_semquery {
     IDTYPE semid;
 } __attribute__((packed));
 
-int ipc_sysv_semquery_send (IDTYPE semid, int * nsems, PAL_NUM ** host_sem_ids);
+int ipc_sysv_semquery_send (IDTYPE semid, size_t* nsems, PAL_NUM** host_sem_ids);
 int ipc_sysv_semquery_callback (IPC_CALLBACK_ARGS);
 
 /* SYSV_SEMREPLY */
 struct shim_ipc_sysv_semreply {
     IDTYPE semid;
-    int nsems;
+    size_t nsems;
     PAL_NUM host_sem_ids[];
 } __attribute__((packed));
 
-int ipc_sysv_semreply_send (struct shim_ipc_port * port, IDTYPE dest,
-                            IDTYPE semid, int nsems, PAL_NUM * host_sem_ids,
-                            unsigned long seq);
+int ipc_sysv_semreply_send (struct shim_ipc_port* port, IDTYPE dest, IDTYPE semid, size_t nsems,
+                            PAL_NUM* host_sem_ids, unsigned long seq);
 int ipc_sysv_semreply_callback (IPC_CALLBACK_ARGS);
 #endif
 

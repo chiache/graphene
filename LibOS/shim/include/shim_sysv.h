@@ -47,6 +47,7 @@ struct sysv_score {
 struct sysv_client {
     struct shim_ipc_port *  port;
     IDTYPE                  vmid;
+    IDTYPE                  pid;
     unsigned                seq;
 };
 
@@ -123,23 +124,23 @@ struct msg_type {
 #define MSG_BALANCE_THRESHOLD     100
 
 struct msg_handle_backup {
-    int     perm;           /* access permissions */
-    int     nmsgs;          /* number of msgs */
-    int     currentsize;    /* current size in bytes */
+    struct msqid_ds msqstat;
+    size_t      nmsgs;
+    size_t      current_bytes;
 };
 
 struct msg_backup {
     long    type;
-    int     size;
+    size_t  size;
     char    data[];
 };
 
 struct shim_msg_handle;
 
-int add_msg_handle (unsigned long key, IDTYPE id, bool owned);
+int add_msg_handle (key_t key, IDTYPE id, mode_t perm, bool owned);
 int del_msg_handle (struct shim_msg_handle * msgq);
 
-struct shim_msg_handle * get_msg_handle_by_key (unsigned long key);
+struct shim_msg_handle * get_msg_handle_by_key (key_t key);
 struct shim_msg_handle * get_msg_handle_by_id (IDTYPE id);
 
 void put_msg_handle (struct shim_msg_handle * msgq);
@@ -152,6 +153,9 @@ int add_sysv_msg (struct shim_msg_handle * msgq,
 int get_sysv_msg (struct shim_msg_handle * msgq,
                   long type, size_t size, void * data, int flags,
                   struct sysv_client * src);
+
+void get_msg_stat(struct shim_msg_handle* msgq, struct msqid_ds* buf);
+int update_msg_perm(struct shim_msg_handle* msgq, uid_t caller, uid_t uid, gid_t gid, mode_t mode);
 
 int store_all_msg_persist (void);
 
@@ -206,8 +210,8 @@ struct sem_client_backup {
     int             nops;
 };
 
-int add_sem_handle (unsigned long key, IDTYPE id, int nsems, bool owned);
-struct shim_sem_handle * get_sem_handle_by_key (unsigned long key);
+int add_sem_handle (key_t key, IDTYPE id, size_t nsems, mode_t mode, bool owned);
+struct shim_sem_handle * get_sem_handle_by_key (key_t key);
 struct shim_sem_handle * get_sem_handle_by_id (IDTYPE semid);
 void put_sem_handle (struct shim_sem_handle * sem);
 int del_sem_handle (struct shim_sem_handle * sem);
@@ -219,6 +223,10 @@ int recover_sem_ownership (struct shim_sem_handle * sem,
 int submit_sysv_sem (struct shim_sem_handle * sem, struct sembuf * sops,
                      int nsops, unsigned long timeout,
                      struct sysv_client * client);
+
+void get_sem_stat(struct shim_sem_handle* sem, struct semid_ds* buf);
+int update_sem_perm(struct shim_sem_handle* sem, uid_t caller, uid_t uid, gid_t gid, mode_t mode);
+
 
 #ifdef USE_SHARED_SEMAPHORE
 int send_sem_host_ids (struct shim_sem_handle * sem,

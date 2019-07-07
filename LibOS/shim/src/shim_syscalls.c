@@ -365,7 +365,7 @@ DEFINE_SHIM_SYSCALL (kill, 2, shim_do_kill, int, pid_t, pid, int, sig)
 DEFINE_SHIM_SYSCALL (uname, 1, shim_do_uname, int, struct old_utsname *, buf)
 
 /* semget: sys/shim_semget.c */
-DEFINE_SHIM_SYSCALL (semget, 3, shim_do_semget, int, key_t, key, int, nsems,
+DEFINE_SHIM_SYSCALL (semget, 3, shim_do_semget, int, key_t, key, size_t, nsems,
                      int, semflg)
 
 /* semop: sys/shim_semget.c */

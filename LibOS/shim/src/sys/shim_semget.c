@@ -52,10 +52,8 @@ DEFINE_PROFILE_CATEGORY(sysv_sem, );
 #define SEM_TO_HANDLE(semhdl) \
         container_of((semhdl), struct shim_handle, info.sem)
 
-static int __add_sem_handle (unsigned long key, IDTYPE semid,
-                             int nsems, bool owned,
-                             struct shim_sem_handle ** semhdl)
-{
+static int __add_sem_handle (key_t key, IDTYPE semid, size_t nsems, mode_t mode, bool owned,
+                             struct shim_sem_handle** semhdl) {
     LISTP_TYPE(shim_sem_handle) * key_head = (key != IPC_PRIVATE) ?
                                    &sem_key_hlist[SEM_HASH(key)] : NULL;
     LISTP_TYPE(shim_sem_handle) * sid_head = semid ?
@@ -99,7 +97,7 @@ static int __add_sem_handle (unsigned long key, IDTYPE semid,
             goto failed;
         }
 
-        for (int i = 0 ; i < nsems ; i++) {
+        for (size_t i = 0 ; i < nsems ; i++) {
             tmp->sems[i].num = i;
             tmp->sems[i].val = 0;
             tmp->sems[i].host_sem_id = 0;
@@ -107,6 +105,27 @@ static int __add_sem_handle (unsigned long key, IDTYPE semid,
             INIT_LISTP(&tmp->sems[i].ops);
             INIT_LISTP(&tmp->sems[i].next_ops);
         }
+    }
+
+    if (owned) {
+        // Only update tmp->semstat if the current process is the owner
+        struct shim_thread* cur_thread = get_cur_thread();
+        struct semid_ds* stat = malloc(sizeof(struct semid_ds));
+        if (!stat) {
+            put_handle(hdl);
+            return -ENOMEM;
+        }
+
+        memset(stat, 0, sizeof(*stat));
+        stat->sem_perm.key  = key;
+        stat->sem_perm.uid  = cur_thread->euid;
+        stat->sem_perm.gid  = cur_thread->egid;
+        stat->sem_perm.cuid = cur_thread->euid;
+        stat->sem_perm.cgid = cur_thread->egid;
+        stat->sem_perm.mode = mode;
+        tmp->semstat = stat;
+    } else {
+        tmp->semstat = NULL;
     }
 
     INIT_LISTP(&tmp->migrated);
@@ -137,15 +156,15 @@ failed:
     return ret;
 }
 
-int add_sem_handle (unsigned long key, IDTYPE id, int nsems, bool owned)
+int add_sem_handle (key_t key, IDTYPE id, size_t nsems, mode_t mode, bool owned)
 {
     lock(&sem_list_lock);
-    int ret = __add_sem_handle(key, id, nsems, owned, NULL);
+    int ret = __add_sem_handle(key, id, nsems, mode, owned, NULL);
     unlock(&sem_list_lock);
     return ret;
 }
 
-struct shim_sem_handle * get_sem_handle_by_key (unsigned long key)
+struct shim_sem_handle * get_sem_handle_by_key (key_t key)
 {
     LISTP_TYPE(shim_sem_handle) * key_head = &sem_key_hlist[SEM_HASH(key)];
     struct shim_sem_handle * tmp, * found = NULL;
@@ -232,7 +251,7 @@ static void __try_create_lock (void)
     create_lock_runtime(&sem_list_lock);
 }
 
-int shim_do_semget (key_t key, int nsems, int semflg)
+int shim_do_semget (key_t key, size_t nsems, int semflg)
 {
     INC_PROFILE_OCCURENCE(syscall_use_ipc);
     IDTYPE semid = 0;
@@ -253,6 +272,8 @@ int shim_do_semget (key_t key, int nsems, int semflg)
     k.type = SYSV_SEM;
 
     if (semflg & IPC_CREAT) {
+        mode_t mode = ((mode_t) semflg) & 0x777; // The lower 9 bits of semflg are permission bits
+
         do {
             semid = allocate_sysv(0, 0);
             if (!semid)
@@ -266,7 +287,7 @@ int shim_do_semget (key_t key, int nsems, int semflg)
             }
         }
 
-        add_sem_handle(key, semid, nsems, true);
+        add_sem_handle(key, semid, nsems, mode, true);
     } else {
         if ((ret = ipc_sysv_findkey_send(&k)) < 0)
             return ret;
@@ -279,9 +300,7 @@ int shim_do_semget (key_t key, int nsems, int semflg)
     return semid;
 }
 
-static int connect_sem_handle (int semid, int nsems,
-                               struct shim_sem_handle ** semp)
-{
+static int connect_sem_handle (int semid, size_t nsems, struct shim_sem_handle** semp) {
     struct shim_sem_handle * sem = get_sem_handle_by_id(semid);
     int ret;
 
@@ -291,7 +310,7 @@ static int connect_sem_handle (int semid, int nsems,
 
         if (!sem) {
             lock(&sem_list_lock);
-            ret = __add_sem_handle(IPC_PRIVATE, semid, nsems, false, &sem);
+            ret = __add_sem_handle(IPC_PRIVATE, semid, nsems, 0, false, &sem);
             unlock(&sem_list_lock);
             if (ret < 0)
                 return ret;
@@ -384,12 +403,47 @@ int shim_do_semtimedop (int semid, struct sembuf * sops, unsigned int nsops,
                       timeout->tv_sec * 1000000000ULL + timeout->tv_nsec);
 }
 
+static void __get_sem_stat(struct shim_sem_handle* sem, struct semid_ds* buf) {
+    assert(sem->owned && sem->semstat);
+    *buf = *sem->semstat;
+    buf->sem_nsems = sem->nsems;
+}
+
+void get_sem_stat(struct shim_sem_handle* sem, struct semid_ds* buf) {
+    struct shim_handle * hdl = SEM_TO_HANDLE(sem);
+    lock(&hdl->lock);
+    __get_sem_stat(sem, buf);
+    unlock(&hdl->lock);
+}
+
+static int __update_sem_perm(struct shim_sem_handle* sem, uid_t caller, uid_t uid, gid_t gid, mode_t mode) {
+    assert(sem->owned && sem->semstat);
+    if (caller != sem->semstat->sem_perm.uid &&
+        caller != sem->semstat->sem_perm.cuid)
+        return -EPERM;
+
+    sem->semstat->sem_perm.uid = uid;
+    sem->semstat->sem_perm.gid = gid;
+    sem->semstat->sem_perm.mode = mode;
+    return 0;
+}
+
+int update_sem_perm(struct shim_sem_handle* sem, uid_t caller, uid_t uid, gid_t gid, mode_t mode) {
+    struct shim_handle * hdl = SEM_TO_HANDLE(sem);
+    lock(&hdl->lock);
+    int ret = __update_sem_perm(sem, caller, uid, gid, mode);
+    unlock(&hdl->lock);
+    return ret;
+}
+
 int shim_do_semctl (int semid, int semnum, int cmd, unsigned long arg)
 {
     INC_PROFILE_OCCURENCE(syscall_use_ipc);
     struct shim_sem_handle * sem;
     int ret;
     __try_create_lock();
+    struct shim_thread* cur_thread = get_cur_thread();
+    assert(cur_thread);
 
     if ((ret = connect_sem_handle(semid, 0, &sem)) < 0)
        return ret;
@@ -408,6 +462,35 @@ int shim_do_semctl (int semid, int semnum, int cmd, unsigned long arg)
             __del_sem_handle(sem);
             goto out;
         }
+
+        case IPC_STAT: {
+            struct semid_ds* buf = (struct semid_ds*)arg;
+
+            if (sem->owned) {
+                __get_sem_stat(sem, buf);
+                ret = 0;
+                goto out;
+            } else {
+                unlock(&hdl->lock);
+                ret = ipc_sysv_getstat_send(sem->semid, SYSV_SEM, buf);
+                goto out_unlocked;
+            }
+        }
+
+        case IPC_SET: {
+            struct semid_ds* buf = (struct semid_ds*)arg;
+
+            if (sem->owned) {
+                ret = __update_sem_perm(sem, cur_thread->euid, buf->sem_perm.uid, buf->sem_perm.gid, buf->sem_perm.mode);
+                goto out;
+            } else {
+                unlock(&hdl->lock);
+                ret = ipc_sysv_setperm_send(sem->semid, SYSV_SEM, cur_thread->euid,
+                                            buf->sem_perm.uid, buf->sem_perm.gid,
+                                            buf->sem_perm.mode);
+                goto out_unlocked;
+            }
+        }
     }
 
     if (sem->owned) {
@@ -418,7 +501,7 @@ int shim_do_semctl (int semid, int semnum, int cmd, unsigned long arg)
 
         switch (cmd) {
             case GETALL:
-                for (int i = 0 ; i < sem->nsems ; i++) {
+                for (size_t i = 0 ; i < sem->nsems ; i++) {
                     unsigned short val = sem->sems[i].val;
                     ((unsigned short *) arg)[i] = val;
                 }
@@ -441,7 +524,7 @@ int shim_do_semctl (int semid, int semnum, int cmd, unsigned long arg)
                 break;
 
             case SETALL:
-                for (int i = 0 ; i < sem->nsems ; i++) {
+                for (size_t i = 0 ; i < sem->nsems ; i++) {
                     unsigned short val = ((unsigned short *) arg)[i];
                     sem->sems[i].val = val;
                 }
@@ -487,6 +570,7 @@ int shim_do_semctl (int semid, int semnum, int cmd, unsigned long arg)
 
 out:
     unlock(&hdl->lock);
+out_unlocked:
     put_sem_handle(sem);
     return ret;
 }
@@ -783,6 +867,9 @@ unowned:
 
     __handle_one_sysv_sem(sem, &stat, sops);
     SAVE_PROFILE_INTERVAL(sem_handle_one_sysv_sem);
+
+    assert(sem->semstat);
+    sem->semstat->sem_otime = DkSystemTimeQuery() * 1000;
 
     if (stat.completed || stat.failed) {
         ret = stat.completed ? 0 : -EAGAIN;

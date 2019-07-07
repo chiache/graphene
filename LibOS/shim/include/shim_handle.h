@@ -233,22 +233,22 @@ struct msg_client;
 
 DEFINE_LIST(shim_msg_handle);
 struct shim_msg_handle {
-    unsigned long       msqkey;         /* msg queue key from user */
+    key_t               msqkey;         /* msg queue key from user */
     IDTYPE              msqid;          /* msg queue identifier */
+    struct msqid_ds*    msqstat;        // store the msg queue stat (owners only)
     bool                owned;          /* owned by current process */
     struct shim_ipc_info * owner;
     LEASETYPE           lease;
-    int                 perm;           /* access permissions */
     bool                deleted;        /* marking the queue deleted */
-    int                 nmsgs;          /* number of msgs */
-    int                 currentsize;    /* current size in bytes */
+    size_t              nmsgs;          /* number of msgs */
+    size_t              current_bytes;  /* current size in bytes */
     struct msg_qobj *   queue;
-    int                 queuesize;
-    int                 queueused;
+    size_t              queue_size;
+    size_t              queue_used;
     struct msg_qobj *   freed;
     PAL_HANDLE          event;          /* event for waiting */
-    int                 ntypes;
-    int                 maxtypes;
+    size_t              ntypes;
+    size_t              maxtypes;
     struct msg_type *   types;
     struct sysv_score   scores[MAX_SYSV_CLIENTS];
     LIST_TYPE(shim_msg_handle) list;
@@ -260,22 +260,23 @@ struct sem_objs;
 
 DEFINE_LIST(shim_sem_handle);
 struct shim_sem_handle {
-    unsigned long       semkey;
+    key_t               semkey;         /* sem key from user */
     IDTYPE              semid;
+    struct semid_ds*    semstat;        // store the sem stat (owners only)
     bool                owned;
     struct shim_ipc_info * owner;
     LEASETYPE           lease;
-    int                 perm;
     bool                deleted;
     PAL_HANDLE          event;
-    int                 nsems;
+    size_t              nsems;
     struct sem_obj *    sems;
-    int                 nreqs;
+    size_t              nreqs;
     struct sysv_score   scores[MAX_SYSV_CLIENTS];
     LISTP_TYPE(sem_ops) migrated;
     LIST_TYPE(shim_sem_handle) list;
     LIST_TYPE(shim_sem_handle) key_hlist;
     LIST_TYPE(shim_sem_handle) sid_hlist;
+
 };
 DEFINE_LIST(futex_waiter);
 DEFINE_LISTP(futex_waiter);

@@ -54,9 +54,8 @@ DEFINE_PROFILE_CATEGORY(sysv_msg, );
 #define MSG_TO_HANDLE(msghdl)   \
         container_of((msghdl), struct shim_handle, info.msg)
 
-static int __add_msg_handle (unsigned long key, IDTYPE msqid, bool owned,
-                             struct shim_msg_handle ** msghdl)
-{
+static int __add_msg_handle(key_t key, IDTYPE msqid, mode_t mode, bool owned,
+                            struct shim_msg_handle** msghdl) {
     LISTP_TYPE(shim_msg_handle) * key_head = (key != IPC_PRIVATE) ?
                                    &msgq_key_hlist[MSGQ_HASH(key)] :
                                    NULL;
@@ -98,17 +97,37 @@ static int __add_msg_handle (unsigned long key, IDTYPE msqid, bool owned,
     msgq->msqid     = msqid;
     msgq->owned     = owned;
     msgq->deleted   = false;
-    msgq->currentsize = 0;
     msgq->event     = DkSynchronizationEventCreate(PAL_FALSE);
 
     msgq->queue     = malloc(MSG_QOBJ_SIZE * DEFAULT_MSG_QUEUE_SIZE);
-    msgq->queuesize = DEFAULT_MSG_QUEUE_SIZE;
-    msgq->queueused = 0;
+    msgq->queue_size = DEFAULT_MSG_QUEUE_SIZE;
+    msgq->queue_used = 0;
     msgq->freed     = NULL;
 
     msgq->ntypes    = 0;
     msgq->maxtypes  = INIT_MSG_TYPE_SIZE;
     msgq->types     = malloc(sizeof(struct msg_type) * INIT_MSG_TYPE_SIZE);
+
+    if (owned) {
+        // Only update msgq->msqstat if the current process is the owner
+        struct shim_thread* cur_thread = get_cur_thread();
+        struct msqid_ds* stat = malloc(sizeof(struct msqid_ds));
+        if (!stat) {
+            put_handle(hdl);
+            return -ENOMEM;
+        }
+
+        memset(stat, 0, sizeof(*stat));
+        stat->msg_perm.key  = key;
+        stat->msg_perm.uid  = cur_thread->euid;
+        stat->msg_perm.gid  = cur_thread->egid;
+        stat->msg_perm.cuid = cur_thread->euid;
+        stat->msg_perm.cgid = cur_thread->egid;
+        stat->msg_perm.mode = mode;
+        msgq->msqstat = stat;
+    } else {
+        msgq->msqstat = NULL;
+    }
 
     INIT_LIST_HEAD(msgq, list);
     get_handle(hdl);
@@ -134,15 +153,14 @@ static int __add_msg_handle (unsigned long key, IDTYPE msqid, bool owned,
     return 0;
 }
 
-int add_msg_handle (unsigned long key, IDTYPE id, bool owned)
-{
+int add_msg_handle(key_t key, IDTYPE id, mode_t mode, bool owned) {
     lock(&msgq_list_lock);
-    int ret = __add_msg_handle(key, id, owned, NULL);
+    int ret = __add_msg_handle(key, id, mode, owned, NULL);
     unlock(&msgq_list_lock);
     return ret;
 }
 
-struct shim_msg_handle * get_msg_handle_by_key (unsigned long key)
+struct shim_msg_handle * get_msg_handle_by_key (key_t key)
 {
 
     LISTP_TYPE(shim_msg_handle) * key_head = &msgq_key_hlist[MSGQ_HASH(key)];
@@ -199,9 +217,9 @@ static void * __get_msg_qobj (struct shim_msg_handle * msgq)
         return obj;
     }
 
-    if (msgq->queueused < msgq->queuesize) {
-        obj = &msgq->queue[msgq->queueused];
-        msgq->queueused++;
+    if (msgq->queue_used < msgq->queue_size) {
+        obj = &msgq->queue[msgq->queue_used];
+        msgq->queue_used++;
         obj->next = NULL;
         return obj;
     }
@@ -232,10 +250,14 @@ static int __del_msg_handle (struct shim_msg_handle * msgq)
 
     msgq->deleted = true;
     free(msgq->queue);
-    msgq->queuesize = 0;
-    msgq->queueused = 0;
+    msgq->queue_size = 0;
+    msgq->queue_used = 0;
     free(msgq->types);
     msgq->ntypes = 0;
+    if (msgq->msqstat) {
+        free(msgq->msqstat);
+        msgq->msqstat = NULL;
+    }
 
     struct shim_handle * hdl = MSG_TO_HANDLE(msgq);
 
@@ -293,6 +315,8 @@ int shim_do_msgget (key_t key, int msgflg)
     k.type = SYSV_MSGQ;
 
     if (msgflg & IPC_CREAT) {
+        mode_t mode = ((mode_t) msgflg) & 0x777; // The lower 9 bits of msgflg are permission bits
+
         do {
             msgid = allocate_sysv(0, 0);
             if (!msgid)
@@ -306,7 +330,7 @@ int shim_do_msgget (key_t key, int msgflg)
             }
         }
 
-        add_msg_handle(key, msgid, true);
+        add_msg_handle(key, msgid, mode, true);
     } else {
         /* query the manager with the key to find the
            corresponding sysvkey */
@@ -318,7 +342,7 @@ int shim_do_msgget (key_t key, int msgflg)
         if ((ret = ipc_sysv_query_send(msgid)) < 0)
             return ret;
 
-        add_msg_handle(key, msgid, false);
+        add_msg_handle(key, msgid, 0, false);
     }
 
     return msgid;
@@ -335,7 +359,7 @@ static int connect_msg_handle (int msqid, struct shim_msg_handle ** msgqp)
 
         if (!msgq) {
             lock(&msgq_list_lock);
-            ret = __add_msg_handle(IPC_PRIVATE, msqid, false, &msgq);
+            ret = __add_msg_handle(IPC_PRIVATE, msqid, 0, false, &msgq);
             unlock(&msgq_list_lock);
             if (ret < 0)
                 return ret;
@@ -425,6 +449,43 @@ int shim_do_msgrcv (int msqid, void * msgp, size_t msgsz, long msgtype,
     return ret;
 }
 
+static void __get_msg_stat(struct shim_msg_handle* msgq, struct msqid_ds* buf) {
+    assert(msgq->owned && msgq->msqstat);
+    *buf = *msgq->msqstat;
+    buf->msg_qnum = msgq->nmsgs;
+    buf->msg_cbytes = msgq->current_bytes;
+}
+
+void get_msg_stat(struct shim_msg_handle* msgq, struct msqid_ds* buf) {
+    struct shim_handle * hdl = MSG_TO_HANDLE(msgq);
+    lock(&hdl->lock);
+    assert(msgq->owned && msgq->msqstat);
+    *buf = *msgq->msqstat;
+    buf->msg_qnum = msgq->nmsgs;
+    buf->msg_cbytes = msgq->current_bytes;
+    unlock(&hdl->lock);
+}
+
+static int __update_msg_perm(struct shim_msg_handle* msgq, uid_t caller, uid_t uid, gid_t gid, mode_t mode) {
+    assert(msgq->owned && msgq->msqstat);
+    if (caller != msgq->msqstat->msg_perm.uid &&
+        caller != msgq->msqstat->msg_perm.cuid)
+        return -EPERM;
+
+    msgq->msqstat->msg_perm.uid = uid;
+    msgq->msqstat->msg_perm.gid = gid;
+    msgq->msqstat->msg_perm.mode = mode;
+    return 0;
+}
+
+int update_msg_perm(struct shim_msg_handle* msgq, uid_t caller, uid_t uid, gid_t gid, mode_t mode) {
+    struct shim_handle * hdl = MSG_TO_HANDLE(msgq);
+    lock(&hdl->lock);
+    int ret = __update_msg_perm(msgq, caller, uid, gid, mode);
+    unlock(&hdl->lock);
+    return ret;
+}
+
 int shim_do_msgctl (int msqid, int cmd, struct msqid_ds * buf)
 {
     INC_PROFILE_OCCURENCE(syscall_use_ipc);
@@ -435,9 +496,14 @@ int shim_do_msgctl (int msqid, int cmd, struct msqid_ds * buf)
     struct shim_msg_handle * msgq;
     int ret;
     __try_create_lock();
+    struct shim_thread* cur_thread = get_cur_thread();
+    assert(cur_thread);
 
     if ((ret = connect_msg_handle(msqid, &msgq)) < 0)
        return ret;
+
+    struct shim_handle* hdl = MSG_TO_HANDLE(msgq);
+    lock(&hdl->lock);
 
     switch (cmd) {
         case IPC_RMID:
@@ -450,22 +516,46 @@ int shim_do_msgctl (int msqid, int cmd, struct msqid_ds * buf)
             __del_msg_handle(msgq);
             break;
 
+        case IPC_STAT:
+            if (msgq->owned) {
+                __get_msg_stat(msgq, buf);
+                ret = 0;
+            } else {
+                unlock(&hdl->lock);
+                ret = ipc_sysv_getstat_send(msgq->msqid, SYSV_MSGQ, buf);
+                goto out_unlocked;
+            }
+            break;
+
+        case IPC_SET:
+            if (msgq->owned) {
+                ret = __update_msg_perm(msgq, cur_thread->euid, buf->msg_perm.uid, buf->msg_perm.gid, buf->msg_perm.mode);
+            } else {
+                unlock(&hdl->lock);
+                ret = ipc_sysv_setperm_send(msgq->msqid, SYSV_MSGQ,
+                                            cur_thread->euid,
+                                            buf->msg_perm.uid, buf->msg_perm.gid,
+                                            buf->msg_perm.mode);
+                goto out_unlocked;
+            }
+            break;
+
         default:
             ret = -ENOSYS;
             break;
     }
 
+    unlock(&hdl->lock);
+out_unlocked:
     put_msg_handle(msgq);
     return ret;
 }
 
-static struct msg_type *
-__add_msg_type (int type, struct msg_type ** ptypes, int * pntypes,
-                int * pmaxtypes)
-{
+static struct msg_type*
+__add_msg_type (int type, struct msg_type** ptypes, size_t* pntypes, size_t* pmaxtypes) {
     struct msg_type * types = *ptypes;
-    int ntypes = *pntypes;
-    int maxtypes = *pmaxtypes;
+    size_t ntypes = *pntypes;
+    size_t maxtypes = *pmaxtypes;
 
     struct msg_type * mtype;
     for (mtype = types ;
@@ -524,7 +614,7 @@ static int __load_msg_qobjs (struct shim_msg_handle * msgq,
         mtype->msg_tail = NULL;
 
     msgq->nmsgs--;
-    msgq->currentsize -= msg->size;
+    msgq->current_bytes -= msg->size;
     return 0;
 }
 
@@ -565,7 +655,7 @@ static int __store_msg_qobjs (struct shim_msg_handle * msgq,
     }
 
     msgq->nmsgs++;
-    msgq->currentsize += size;
+    msgq->current_bytes += size;
     return 0;
 
 eagain:
@@ -609,7 +699,9 @@ int add_sysv_msg (struct shim_msg_handle * msgq,
 
     if (!msgq->owned) {
         unlock(&hdl->lock);
-        ret = ipc_sysv_msgsnd_send(src->port, src->vmid, msgq->msqid,
+        struct shim_thread* cur_thread = get_cur_thread();
+        assert(cur_thread);
+        ret = ipc_sysv_msgsnd_send(src->port, src->vmid, msgq->msqid, cur_thread->tgid,
                                    type, data, size, src->seq);
         goto out;
     }
@@ -620,6 +712,12 @@ int add_sysv_msg (struct shim_msg_handle * msgq,
 
     if ((ret = __store_msg_qobjs(msgq, mtype, size, data)) < 0)
         goto out_locked;
+
+    assert(msgq->msqstat);
+    if (src) {
+        msgq->msqstat->msg_stime = (time_t) DkSystemTimeQuery() * 1000;
+        msgq->msqstat->msg_lspid = src->pid;
+    }
 
 #if MIGRATE_SYSV_MSG == 1
     if (msgq->owned)
@@ -723,7 +821,9 @@ int get_sysv_msg (struct shim_msg_handle * msgq,
 
 unowned:
         unlock(&hdl->lock);
-        ret = ipc_sysv_msgrcv_send(msqid, type, flags, data, size);
+        struct shim_thread* cur_thread = get_cur_thread();
+        assert(cur_thread);
+        ret = ipc_sysv_msgrcv_send(msqid, cur_thread->tgid, type, flags, data, size);
         if (ret != -EAGAIN &&
             ret != -ECONNREFUSED)
             goto out;
@@ -767,7 +867,13 @@ unowned:
     }
 
     if ((ret = __load_msg_qobjs(msgq, mtype, msg, data)) < 0)
-        goto out_locked;;
+        goto out_locked;
+
+    assert(msgq->msqstat);
+    if (src) {
+        msgq->msqstat->msg_rtime = (time_t) DkSystemTimeQuery() * 1000;
+        msgq->msqstat->msg_lrpid = src->pid;
+    }
 
     ret = msg->size;
 out_locked:
@@ -798,7 +904,7 @@ static int __store_msg_persist (struct shim_msg_handle * msgq)
 
     int expected_size = sizeof(struct msg_handle_backup) +
                         sizeof(struct msg_backup) * msgq->nmsgs +
-                        msgq->currentsize;
+                        msgq->current_bytes;
 
     if (DkStreamSetLength(file, expected_size))
         goto err_file;
@@ -814,9 +920,11 @@ static int __store_msg_persist (struct shim_msg_handle * msgq)
     struct msg_handle_backup * mback = mem;
     mem += sizeof(struct msg_handle_backup);
 
-    mback->perm        = msgq->perm;
-    mback->nmsgs       = msgq->nmsgs;
-    mback->currentsize = msgq->currentsize;
+    if (msgq->owned)
+        mback->msqstat = *msgq->msqstat;
+
+    mback->nmsgs         = msgq->nmsgs;
+    mback->current_bytes = msgq->current_bytes;
 
     struct msg_type * mtype;
     for (mtype = msgq->types ; mtype < &msgq->types[msgq->ntypes] ;
@@ -889,14 +997,15 @@ static int __load_msg_persist (struct shim_msg_handle * msgq, bool readmsg)
         goto out;
     }
 
-    msgq->perm = mback.perm;
+    if (msgq->owned)
+        *msgq->msqstat = mback.msqstat;
 
     if (!readmsg || !mback.nmsgs)
         goto done;
 
     int expected_size = sizeof(struct msg_handle_backup) +
                         sizeof(struct msg_backup) * mback.nmsgs +
-                        mback.currentsize;
+                        mback.msqstat.msg_cbytes;
 
     void * mem = (void *) DkStreamMap(file, NULL, PAL_PROT_READ, 0,
                                       ALIGN_UP(expected_size));
@@ -909,11 +1018,11 @@ static int __load_msg_persist (struct shim_msg_handle * msgq, bool readmsg)
     mem += sizeof(struct msg_handle_backup);
 
     struct msg_type * mtype = NULL;
-    for (int i = 0 ; i < mback.nmsgs ; i++) {
+    for (size_t i = 0 ; i < mback.nmsgs ; i++) {
         struct msg_backup * m = mem;
         mem += sizeof(struct msg_backup) + m->size;
 
-        debug("load msg: type=%ld, size=%d\n", m->type, m->size);
+        debug("load msg: type=%ld, size=%ld\n", m->type, m->size);
 
         if (!mtype || mtype->type != m->type)
             mtype = __add_msg_type(m->type, &msgq->types, &msgq->ntypes,
@@ -975,7 +1084,7 @@ int shim_do_msgpersist (int msqid, int cmd)
 
         case MSGPERSIST_LOAD:
             lock(&msgq_list_lock);
-            ret = __add_msg_handle(0, msqid, false, &msgq);
+            ret = __add_msg_handle(0, msqid, 0, false, &msgq);
             if (!ret)
                 ret = __load_msg_persist(msgq, true);
             unlock(&msgq_list_lock);

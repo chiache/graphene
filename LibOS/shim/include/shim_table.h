@@ -399,7 +399,7 @@ pid_t shim_do_wait4 (pid_t pid, int * stat_addr, int option,
                      struct __kernel_rusage * ru);
 int shim_do_kill (pid_t pid, int sig);
 int shim_do_uname (struct old_utsname * buf);
-int shim_do_semget (key_t key, int nsems, int semflg);
+int shim_do_semget (key_t key, size_t nsems, int semflg);
 int shim_do_semop (int semid, struct sembuf * sops, unsigned int nsops);
 int shim_do_semctl (int semid, int semnum, int cmd, unsigned long arg);
 int shim_do_msgget (key_t key, int msgflg);
@@ -593,7 +593,7 @@ pid_t shim_wait4 (pid_t pid, int * stat_addr, int option,
                   struct __kernel_rusage * ru);
 int shim_kill (pid_t pid, int sig);
 int shim_uname (struct old_utsname * buf);
-int shim_semget (key_t key, int nsems, int semflg);
+int shim_semget (key_t key, size_t nsems, int semflg);
 int shim_semop (int semid, struct sembuf * sops, unsigned int nsops);
 int shim_semctl (int semid, int semnum, int cmd, unsigned long arg);
 int shim_shmdt (const void * shmaddr);
