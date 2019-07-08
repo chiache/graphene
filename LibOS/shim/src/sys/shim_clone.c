@@ -131,7 +131,19 @@ int clone_implementation_wrapper(struct clone_args * arg)
 
     if (!my_thread->tcb) {
         stack_allocated = 1;
-        my_thread->tcb = __alloca(sizeof(__libc_tcb_t) + PTHREAD_PADDING);
+        size_t total_libc_size = sizeof(__libc_tcb_t) + PTHREAD_PADDING;
+        my_thread->tcb = __alloca(total_libc_size);
+
+        // If child TCB is not specified by the caller, the child needs to inherit
+        // the parent's TCB. We can emulate this behavior by copying parent TCB into child TCB
+        off_t before_shim_tcb = offsetof(__libc_tcb_t, shim_tcb);
+        off_t after_shim_tcb = before_shim_tcb + sizeof(shim_tcb_t);
+        void* tcb = my_thread->tcb;
+        void* parent_tcb = arg->parent->tcb;
+        // Copy [0, before_shim_tcb)
+        memcpy(tcb, parent_tcb, before_shim_tcb);
+        // Copy [after_shim_tcb, total_libc_size)
+        memcpy(tcb + after_shim_tcb, parent_tcb + after_shim_tcb, total_libc_size - after_shim_tcb);
     }
     allocate_tls(my_thread->tcb, my_thread->user_tcb, my_thread);
     shim_tcb_t * tcb = &my_thread->tcb->shim_tcb;
