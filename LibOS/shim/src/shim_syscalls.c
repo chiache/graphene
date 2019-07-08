@@ -533,27 +533,31 @@ DEFINE_SHIM_SYSCALL (getpgrp, 0, shim_do_getpgrp, pid_t)
 /* setsid: sys/shim_getpid.c */
 DEFINE_SHIM_SYSCALL (setsid, 0, shim_do_setsid, int)
 
-SHIM_SYSCALL_PASSTHROUGH (setreuid, 2, int, uid_t, ruid, uid_t, euid)
+/* setreuid: sys/shim_getpid.c */
+DEFINE_SHIM_SYSCALL (setreuid, 2, shim_do_setreuid, int, uid_t, ruid, uid_t, euid)
 
-SHIM_SYSCALL_PASSTHROUGH (setregid, 2, int, gid_t, rgid, gid_t, egid)
+/* setregid: sys/shim_getpid.c */
+DEFINE_SHIM_SYSCALL (setregid, 2, shim_do_setregid, int, gid_t, rgid, gid_t, egid)
 
-SHIM_SYSCALL_PASSTHROUGH (setresuid, 3, int, uid_t, ruid, uid_t, euid, uid_t,
-                          suid)
+/* setresuid: sys/shim_getpid.c */
+DEFINE_SHIM_SYSCALL (setresuid, 3, shim_do_setresuid, int, uid_t, ruid, uid_t, euid, uid_t, suid)
 
-SHIM_SYSCALL_PASSTHROUGH (getresuid, 3, int, uid_t *, ruid, uid_t *, euid,
-                          uid_t *, suid)
+/* getresuid: sys/shim_getpid.c */
+DEFINE_SHIM_SYSCALL (getresuid, 3, shim_do_getresuid, int, uid_t *, ruid, uid_t *, euid, uid_t *, suid)
 
-SHIM_SYSCALL_PASSTHROUGH (setresgid, 3, int, gid_t, rgid, gid_t, egid, gid_t,
-                          sgid)
+/* setresgid: sys/shim_getpid.c */
+DEFINE_SHIM_SYSCALL (setresgid, 3, shim_do_setresgid, int, gid_t, rgid, gid_t, egid, gid_t, sgid)
 
-SHIM_SYSCALL_PASSTHROUGH (getresgid, 3, int, gid_t *, rgid, gid_t *, egid,
-                          gid_t *, sgid)
+/* getresgid: sys/shim_getpid.c */
+DEFINE_SHIM_SYSCALL (getresgid, 3, shim_do_getresgid, int, gid_t *, rgid, gid_t *, egid, gid_t *, sgid)
 
 DEFINE_SHIM_SYSCALL (getpgid, 1, shim_do_getpgid, int, pid_t, pid)
 
-SHIM_SYSCALL_PASSTHROUGH (setfsuid, 1, int, uid_t, uid)
+/* setfsuid: sys/shim_getpid.c */
+DEFINE_SHIM_SYSCALL (setfsuid, 1, shim_do_setfsuid, int, uid_t, uid)
 
-SHIM_SYSCALL_PASSTHROUGH (setfsgid, 1, int, gid_t, gid)
+/* setfsgid: sys/shim_getpid.c */
+DEFINE_SHIM_SYSCALL (setfsgid, 1, shim_do_setfsgid, int, gid_t, gid)
 
 DEFINE_SHIM_SYSCALL (getsid, 1, shim_do_getsid, int, pid_t, pid)
 

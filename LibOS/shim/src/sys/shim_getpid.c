@@ -216,3 +216,85 @@ int shim_do_getsid (pid_t pid)
 
     return thread->pgid;
 }
+
+int shim_do_setreuid(uid_t ruid, uid_t euid) {
+    struct shim_thread* thread = get_cur_thread();
+    assert(thread);
+    thread->uid  = ruid;
+    thread->euid = euid;
+    return 0;
+}
+
+int shim_do_setregid(gid_t rgid, gid_t egid) {
+    struct shim_thread* thread = get_cur_thread();
+    assert(thread);
+    thread->gid  = rgid;
+    thread->egid = egid;
+    return 0;
+}
+
+int shim_do_setresuid(uid_t ruid, uid_t euid, uid_t suid) {
+    struct shim_thread* thread = get_cur_thread();
+    assert(thread);
+    thread->uid  = ruid;
+    thread->euid = euid;
+    thread->suid = suid;
+    return 0;
+}
+
+int shim_do_getresuid(uid_t* ruid, uid_t* euid, uid_t* suid) {
+    struct shim_thread* thread = get_cur_thread();
+    assert(thread);
+
+    if (test_user_memory(ruid, sizeof(*ruid), true))
+        return -EFAULT;
+    if (test_user_memory(euid, sizeof(*euid), true))
+        return -EFAULT;
+    if (test_user_memory(suid, sizeof(*suid), true))
+        return -EFAULT;
+
+    *ruid = thread->uid;
+    *euid = thread->euid;
+    *suid = thread->suid;
+    return 0;
+}
+
+int shim_do_setresgid(gid_t rgid, gid_t egid, gid_t sgid) {
+    struct shim_thread* thread = get_cur_thread();
+    assert(thread);
+    thread->gid  = rgid;
+    thread->egid = egid;
+    thread->sgid = sgid;
+    return 0;
+}
+
+int shim_do_getresgid(gid_t* rgid, gid_t* egid, gid_t* sgid) {
+    struct shim_thread* thread = get_cur_thread();
+    assert(thread);
+
+    if (test_user_memory(rgid, sizeof(*rgid), true))
+        return -EFAULT;
+    if (test_user_memory(egid, sizeof(*egid), true))
+        return -EFAULT;
+    if (test_user_memory(sgid, sizeof(*sgid), true))
+        return -EFAULT;
+
+    *rgid = thread->gid;
+    *egid = thread->egid;
+    *sgid = thread->sgid;
+    return 0;
+}
+
+int shim_do_setfsuid(uid_t uid) {
+    struct shim_thread* thread = get_cur_thread();
+    assert(thread);
+    thread->fsuid = uid;
+    return 0;
+}
+
+int shim_do_setfsgid(gid_t gid) {
+    struct shim_thread* thread = get_cur_thread();
+    assert(thread);
+    thread->fsgid = gid;
+    return 0;
+}

@@ -28,7 +28,8 @@ struct shim_thread {
     LEASETYPE tid_lease;
 
     /* credentials */
-    IDTYPE uid, gid, euid, egid;
+    uid_t uid, euid, suid, fsuid;
+    gid_t gid, egid, sgid, fsgid;
 
     /* thread pal handle */
     PAL_HANDLE pal_handle;
