@@ -382,17 +382,8 @@ static int tcp_listen (PAL_HANDLE * handle, char * uri, int options)
     ret = INLINE_SYSCALL(bind, 3, fd, bind_addr, bind_addrlen);
 
     if (IS_ERR(ret)) {
-        switch(ERRNO(ret)) {
-            case EINVAL:
-                ret = -PAL_ERROR_INVAL;
-                goto failed;
-            case EADDRINUSE:
-                ret = -PAL_ERROR_STREAMEXIST;
-                goto failed;
-            default:
-                ret = -PAL_ERROR_DENIED;
-                goto failed;
-        }
+        ret = unix_to_pal_error(ERRNO(ret));
+        goto failed;
     }
 
     if (check_any_addr(bind_addr)) {
@@ -440,14 +431,7 @@ static int tcp_accept (PAL_HANDLE handle, PAL_HANDLE * client)
                                &addrlen, O_CLOEXEC);
 
     if (IS_ERR(newfd))
-        switch(ERRNO(newfd)) {
-            case EWOULDBLOCK:
-                return -PAL_ERROR_TRYAGAIN;
-            case ECONNABORTED:
-                return -PAL_ERROR_STREAMNOTEXIST;
-            default:
-                return unix_to_pal_error(ERRNO(newfd));
-        }
+        return unix_to_pal_error(ERRNO(newfd));
 
     struct sockaddr * dest_addr = &buffer;
     size_t dest_addrlen = addrlen;
@@ -496,17 +480,8 @@ static int tcp_connect (PAL_HANDLE * handle, char * uri, int options)
     if (bind_addr) {
         if (IS_ERR(ret)) {
             INLINE_SYSCALL(close, 1, fd);
-            switch (ERRNO(ret)) {
-                case EADDRINUSE:
-                    ret = -PAL_ERROR_STREAMEXIST;
-                    goto failed;
-                case EADDRNOTAVAIL:
-                    ret = -PAL_ERROR_ADDRNOTEXIST;
-                    goto failed;
-                default:
-                    ret = unix_to_pal_error(ERRNO(ret));
-                    goto failed;
-            }
+            ret = unix_to_pal_error(ERRNO(ret));
+            goto failed;
         }
     }
 
@@ -691,17 +666,8 @@ static int udp_bind (PAL_HANDLE * handle, char * uri, int options)
     ret = INLINE_SYSCALL(bind, 3, fd, bind_addr, bind_addrlen);
 
     if (IS_ERR(ret)) {
-        switch (ERRNO(ret)) {
-            case EADDRINUSE:
-                ret = -PAL_ERROR_STREAMEXIST;
-                goto failed;
-            case EADDRNOTAVAIL:
-                ret = -PAL_ERROR_ADDRNOTEXIST;
-                goto failed;
-            default:
-                ret = unix_to_pal_error(ERRNO(ret));
-                goto failed;
-        }
+        ret = unix_to_pal_error(ERRNO(ret));
+        goto failed;
     }
 
     *handle = socket_create_handle(pal_type_udpsrv, fd, options,
@@ -754,17 +720,8 @@ static int udp_connect (PAL_HANDLE * handle, char * uri, int options)
         ret = INLINE_SYSCALL(bind, 3, fd, bind_addr, bind_addrlen);
 
         if (IS_ERR(ret)) {
-            switch (ERRNO(ret)) {
-                case EADDRINUSE:
-                    ret = -PAL_ERROR_STREAMEXIST;
-                    goto failed;
-                case EADDRNOTAVAIL:
-                    ret = -PAL_ERROR_ADDRNOTEXIST;
-                    goto failed;
-                default:
-                    ret = unix_to_pal_error(ERRNO(ret));
-                    goto failed;
-            }
+            ret = unix_to_pal_error(ERRNO(ret));
+            goto failed;
         }
     }
 
@@ -1388,17 +1345,11 @@ static int64_t mcast_send (PAL_HANDLE handle, uint64_t offset, uint64_t size,
     int64_t bytes = INLINE_SYSCALL(sendmsg, 3, handle->mcast.srv, &hdr,
                                    MSG_NOSIGNAL);
 
-    if (IS_ERR(bytes))
-        switch(ERRNO(bytes)) {
-            case ECONNRESET:
-            case EPIPE:
-                return -PAL_ERROR_CONNFAILED;
-            case EAGAIN:
-                HANDLE_HDR(handle)->flags &= ~WRITABLE(1);
-                /* fallthrough */
-            default:
-                return unix_to_pal_error(ERRNO(bytes));
-        }
+    if (IS_ERR(bytes)) {
+        if (ERRNO(bytes) == EAGAIN)
+            HANDLE_HDR(handle)->flags &= ~WRITABLE(1);
+        return unix_to_pal_error(ERRNO(bytes));
+    }
 
     assert(!IS_ERR(bytes));
     if ((size_t)bytes == size)

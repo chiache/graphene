@@ -33,11 +33,12 @@ int unix_to_pal_error (int unix_errno)
             return -PAL_ERROR_TOOLONG;
         case EISDIR:
             return -PAL_ERROR_STREAMISDIR;
+        case ECONNABORTED:
         case ECONNRESET:
         case EPIPE:
             return -PAL_ERROR_CONNFAILED;
-        case EPERM:
-            return -PAL_ERROR_DENIED;
+        case EADDRNOTAVAIL:
+            return -PAL_ERROR_ADDRNOTEXIST;
         default:
             return -PAL_ERROR_DENIED;
     }

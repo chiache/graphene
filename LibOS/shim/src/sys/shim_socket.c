@@ -897,7 +897,10 @@ int __do_accept (struct shim_handle * hdl, int flags, struct sockaddr * addr,
 
     accepted = DkStreamWaitForClient(hdl->pal_handle);
     if (!accepted) {
-        ret = -PAL_ERRNO;
+        switch(PAL_NATIVE_ERRNO) {
+            case -PAL_ERROR_CONNFAILED: ret = -ECONNABORTED; break;
+            default: ret = -PAL_ERRNO; break;
+        }
         goto out;
     }
 
@@ -1123,12 +1126,9 @@ static ssize_t do_sendmsg (int fd, struct iovec * bufs, int nbufs, int flags,
     ret = 0;
 
     for (int i = 0 ; i < nbufs ; i++) {
-        ret = DkStreamWrite(pal_hdl, 0, bufs[i].iov_len, bufs[i].iov_base,
-                            uri);
-
+        ret = DkStreamWrite(pal_hdl, 0, bufs[i].iov_len, bufs[i].iov_base, uri);
         if (!ret) {
-            ret = (PAL_NATIVE_ERRNO == PAL_ERROR_STREAMEXIST) ?
-                  - ECONNABORTED : -PAL_ERRNO;
+            ret = -PAL_ERRNO;
             break;
         }
 

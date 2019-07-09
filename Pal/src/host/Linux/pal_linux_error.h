@@ -23,6 +23,7 @@ int unix_to_pal_error (int unix_errno)
             return -PAL_ERROR_NOMEM;
         case EFAULT:
             return -PAL_ERROR_BADADDR;
+        case EADDRINUSE:
         case EEXIST:
             return -PAL_ERROR_STREAMEXIST;
         case ENOTDIR:
@@ -34,8 +35,11 @@ int unix_to_pal_error (int unix_errno)
         case EISDIR:
             return -PAL_ERROR_STREAMISDIR;
         case ECONNRESET:
+        case ECONNABORTED:
         case EPIPE:
             return -PAL_ERROR_CONNFAILED;
+        case EADDRNOTAVAIL:
+            return -PAL_ERROR_ADDRNOTEXIST;
         default:
             return -PAL_ERROR_DENIED;
     }
