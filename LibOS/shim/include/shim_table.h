@@ -348,8 +348,8 @@ int shim_do_sigreturn (int __unused);
 int shim_do_ioctl (int fd, int cmd, unsigned long arg);
 ssize_t shim_do_pread64 (int fd, char * buf, size_t count, loff_t pos);
 ssize_t shim_do_pwrite64 (int fd, char * buf,  size_t count, loff_t pos);
-ssize_t shim_do_readv (int fd, const struct iovec * vec, int vlen);
-ssize_t shim_do_writev (int fd, const struct iovec * vec, int vlen);
+ssize_t shim_do_readv (int fd, const struct iovec * vec, size_t vlen);
+ssize_t shim_do_writev (int fd, const struct iovec * vec, size_t vlen);
 int shim_do_access (const char * file, mode_t mode);
 int shim_do_pipe (int * fildes);
 int shim_do_select (int nfds, fd_set * readfds, fd_set * writefds,
@@ -506,6 +506,8 @@ int shim_do_accept4 (int sockfd, struct sockaddr * addr, socklen_t * addrlen,
 int shim_do_dup3 (int oldfd, int newfd, int flags);
 int shim_do_epoll_create1 (int flags);
 int shim_do_pipe2 (int * fildes, int flags);
+ssize_t shim_do_preadv(int fd, const struct iovec* vec, size_t vlen, off_t pos_l, off_t pos_h);
+ssize_t shim_do_pwritev(int fd, const struct iovec* vec, size_t vlen, off_t pos_l, off_t pos_h);
 ssize_t shim_do_recvmmsg (int sockfd, struct mmsghdr * msg, size_t vlen, int flags,
                           struct __kernel_timespec * timeout);
 int shim_do_prlimit64(pid_t pid, int resource, const struct __kernel_rlimit64* new_rlim,
@@ -547,8 +549,8 @@ int shim_rt_sigreturn (int __unused);
 int shim_ioctl (int fd, int cmd, unsigned long arg);
 size_t shim_pread64 (int fd, char * buf, size_t count, loff_t pos);
 size_t shim_pwrite64 (int fd, char * buf, size_t count, loff_t pos);
-ssize_t shim_readv (int fd, const struct iovec * vec, int vlen);
-ssize_t shim_writev (int fd, const struct iovec * vec, int vlen);
+ssize_t shim_readv (int fd, const struct iovec * vec, size_t vlen);
+ssize_t shim_writev (int fd, const struct iovec * vec, size_t vlen);
 int shim_access (const char * file, mode_t mode);
 int shim_pipe (int * fildes);
 int shim_select (int nfds, fd_set * readfds, fd_set * writefds,
@@ -871,10 +873,8 @@ int shim_epoll_create1 (int flags);
 int shim_dup3 (int oldfd, int newfd, int flags);
 int shim_pipe2 (int * fildes, int flags);
 int shim_inotify_init1 (int flags);
-int shim_preadv (unsigned long fd, const struct iovec * vec,
-                 unsigned long vlen, unsigned long pos_l, unsigned long pos_h);
-int shim_pwritev (unsigned long fd, const struct iovec * vec,
-                  unsigned long vlen, unsigned long pos_l, unsigned long pos_h);
+ssize_t shim_preadv(int fd, const struct iovec* vec, size_t vlen, off_t pos_l, off_t pos_h);
+ssize_t shim_pwritev(int fd, const struct iovec* vec, size_t vlen, off_t pos_l, off_t pos_h);
 int shim_rt_tgsigqueueinfo (pid_t tgid, pid_t pid, int sig, siginfo_t * uinfo);
 int shim_perf_event_open (struct perf_event_attr * attr_uptr, pid_t pid,
                           int cpu, int group_fd, int flags);

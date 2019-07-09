@@ -218,35 +218,22 @@ ssize_t shim_do_pread64 (int fd, char * buf, size_t count, loff_t pos)
     struct shim_mount * fs = hdl->fs;
     ssize_t ret = -EACCES;
 
-    if (!fs || !fs->fs_ops)
+    if (!fs || !fs->fs_ops || !fs->fs_ops->read)
         goto out;
 
-    if (!fs->fs_ops->seek) {
-        ret = -ESPIPE;
-        goto out;
-    }
-
-    if (!fs->fs_ops->read)
-        goto out;
-
-    if (hdl->type == TYPE_DIR)
-        goto out;
-
-    int offset = fs->fs_ops->seek(hdl, 0, SEEK_CUR);
-    if (offset < 0) {
-        ret = offset;
+    loff_t old_pos = set_handle_offset(hdl, pos);
+    if (old_pos < 0) {
+        ret = (ssize_t) old_pos;
         goto out;
     }
 
-    ret = fs->fs_ops->seek(hdl, pos, SEEK_SET);
-    if (ret < 0)
-        goto out;
+    ssize_t bytes = fs->fs_ops->read(hdl, buf, count);
 
-    int bytes = fs->fs_ops->read(hdl, buf, count);
-
-    ret = fs->fs_ops->seek(hdl, offset, SEEK_SET);
-    if (ret < 0)
+    loff_t new_pos = set_handle_offset(hdl, old_pos);
+    if (new_pos < 0) {
+        ret = (ssize_t) new_pos;
         goto out;
+    }
 
     ret = bytes;
 out:
@@ -269,35 +256,22 @@ ssize_t shim_do_pwrite64 (int fd, char * buf, size_t count, loff_t pos)
     struct shim_mount * fs = hdl->fs;
     ssize_t ret = -EACCES;
 
-    if (!fs || !fs->fs_ops)
+    if (!fs || !fs->fs_ops || !fs->fs_ops->write)
         goto out;
 
-    if (!fs->fs_ops->seek) {
-        ret = -ESPIPE;
-        goto out;
-    }
-
-    if (!fs->fs_ops->write)
-        goto out;
-
-    if (hdl->type == TYPE_DIR)
-        goto out;
-
-    int offset = fs->fs_ops->seek(hdl, 0, SEEK_CUR);
-    if (offset < 0) {
-        ret = offset;
+    loff_t old_pos = set_handle_offset(hdl, pos);
+    if (old_pos < 0) {
+        ret = (ssize_t) old_pos;
         goto out;
     }
 
-    ret = fs->fs_ops->seek(hdl, pos, SEEK_SET);
-    if (ret < 0)
-        goto out;
+    ssize_t bytes = fs->fs_ops->write(hdl, buf, count);
 
-    int bytes = fs->fs_ops->write(hdl, buf, count);
-
-    ret = fs->fs_ops->seek(hdl, offset, SEEK_SET);
-    if (ret < 0)
+    loff_t new_pos = set_handle_offset(hdl, old_pos);
+    if (new_pos < 0) {
+        ret = (ssize_t) new_pos;
         goto out;
+    }
 
     ret = bytes;
 out:

@@ -202,11 +202,11 @@ DEFINE_SHIM_SYSCALL (pwrite64, 4, shim_do_pwrite64, size_t, int, fd, char *,
 
 /* readv : sys/shim_wrappers.c */
 DEFINE_SHIM_SYSCALL (readv, 3, shim_do_readv, ssize_t, int, fd,
-                     const struct iovec *, vec, int, vlen)
+                     const struct iovec *, vec, size_t, vlen)
 
 /* writev : sys/shim_wrappers.c */
 DEFINE_SHIM_SYSCALL (writev, 3, shim_do_writev, ssize_t, int, fd,
-                     const struct iovec *, vec, int, vlen)
+                     const struct iovec *, vec, size_t, vlen)
 
 /* access: sys/shim_access.c */
 DEFINE_SHIM_SYSCALL (access, 2, shim_do_access, int, const char *, file,
@@ -1119,13 +1119,13 @@ DEFINE_SHIM_SYSCALL (pipe2, 2, shim_do_pipe2, int, int *, fildes, int, flags)
 
 SHIM_SYSCALL_PASSTHROUGH (inotify_init1, 1, int, int, flags)
 
-SHIM_SYSCALL_PASSTHROUGH (preadv, 5, int, unsigned long, fd,
-                          const struct iovec *, vec, unsigned long, vlen,
-                          unsigned long, pos_l, unsigned long, pos_h)
+DEFINE_SHIM_SYSCALL (preadv, 5, shim_do_preadv, ssize_t, int, fd,
+                     const struct iovec*, vec, size_t, vlen,
+                     off_t, pos_l, off_t, pos_h)
 
-SHIM_SYSCALL_PASSTHROUGH (pwritev, 5, int, unsigned long, fd,
-                          const struct iovec *, vec, unsigned long, vlen,
-                          unsigned long, pos_l, unsigned long, pos_h)
+DEFINE_SHIM_SYSCALL (pwritev, 5, shim_do_pwritev, ssize_t, int, fd,
+                     const struct iovec*, vec, size_t, vlen,
+                     off_t, pos_l, off_t, pos_h)
 
 SHIM_SYSCALL_PASSTHROUGH (rt_tgsigqueueinfo, 4, int, pid_t, tgid, pid_t, pid,
                           int, sig, siginfo_t *, uinfo)

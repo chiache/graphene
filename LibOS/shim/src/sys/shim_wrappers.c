@@ -32,51 +32,77 @@
 
 #include <errno.h>
 
-ssize_t shim_do_readv (int fd, const struct iovec * vec, int vlen)
-{
+static int check_iovec(const struct iovec* vec, size_t vlen, bool write) {
     if (!vec || test_user_memory((void *) vec, sizeof(*vec) * vlen, false))
         return -EINVAL;
 
-    for (int i = 0 ; i < vlen ; i++) {
+    for (size_t i = 0 ; i < vlen ; i++) {
         if (vec[i].iov_base) {
-            if (vec[i].iov_base + vec[i].iov_len <= vec[i].iov_base)
+            if (vec[i].iov_base + vec[i].iov_len < vec[i].iov_base)
                 return -EINVAL;
-            if (test_user_memory(vec[i].iov_base, vec[i].iov_len, true))
+            if (test_user_memory(vec[i].iov_base, vec[i].iov_len, write))
                 return -EFAULT;
         }
     }
 
-    struct shim_handle * hdl = get_fd_handle(fd, NULL, NULL);
-    if (!hdl)
-        return -EBADF;
+    return 0;
+}
 
-    int ret = 0;
+loff_t set_handle_offset(struct shim_handle* hdl, loff_t new) {
+    struct shim_mount * fs = hdl->fs;
 
-    if (!(hdl->acc_mode & MAY_READ) ||
-        !hdl->fs || !hdl->fs->fs_ops || !hdl->fs->fs_ops->read) {
-        ret = -EACCES;
-        goto out;
-    }
+    if (!fs || !fs->fs_ops)
+        return -EACCES;
+
+    if (!fs->fs_ops->seek)
+        return -ESPIPE;
+
+    if (hdl->type == TYPE_DIR)
+        return -EACCES;
+
+    loff_t old = fs->fs_ops->seek(hdl, 0, SEEK_CUR);
+    if (old < 0)
+        return old;
+
+    loff_t ret = fs->fs_ops->seek(hdl, new, SEEK_SET);
+    return (ret < 0) ? ret : old;
+}
+
+static ssize_t do_handle_readv(struct shim_handle* hdl, const struct iovec* vec, size_t vlen) {
+
+    if (hdl->type == TYPE_DIR)
+        return -EISDIR;
+
+    if (!(hdl->acc_mode & MAY_READ) || !hdl->fs || !hdl->fs->fs_ops || !hdl->fs->fs_ops->read)
+        return -EACCES;
 
     ssize_t bytes = 0;
 
-    for (int i = 0 ; i < vlen ; i++) {
+    for (size_t i = 0 ; i < vlen ; i++) {
         int b_vec;
 
         if (!vec[i].iov_base)
             continue;
 
         b_vec = hdl->fs->fs_ops->read(hdl, vec[i].iov_base, vec[i].iov_len);
-        if (b_vec < 0) {
-            ret = bytes ? : b_vec;
-            goto out;
-        }
-
+        if (b_vec < 0)
+            return bytes ? : b_vec;
         bytes += b_vec;
     }
 
-    ret = bytes;
-out:
+    return bytes;
+}
+
+ssize_t shim_do_readv(int fd, const struct iovec* vec, size_t vlen) {
+    ssize_t ret = check_iovec(vec, vlen, true);
+    if (ret < 0)
+        return ret;
+
+    struct shim_handle* hdl = get_fd_handle(fd, NULL, NULL);
+    if (!hdl)
+        return -EBADF;
+
+    ret = do_handle_readv(hdl, vec, vlen);
     put_handle(hdl);
     return ret;
 }
@@ -96,48 +122,71 @@ out:
  * actually written. Otherwise, it shall return a value of -1, the file-pointer
  * shall remain unchanged, and errno shall be set to indicate an error
  */
-ssize_t shim_do_writev (int fd, const struct iovec * vec, int vlen)
-{
-    if (!vec || test_user_memory((void *) vec, sizeof(*vec) * vlen, false))
-        return -EINVAL;
+static ssize_t do_handle_writev(struct shim_handle* hdl, const struct iovec* vec, size_t vlen) {
 
-    for (int i = 0 ; i < vlen ; i++) {
-        if (vec[i].iov_base) {
-            if (vec[i].iov_base + vec[i].iov_len < vec[i].iov_base)
-                return -EINVAL;
-            if (test_user_memory(vec[i].iov_base, vec[i].iov_len, false))
-                return -EFAULT;
-        }
-    }
+    if (hdl->type == TYPE_DIR)
+        return -EISDIR;
 
-    struct shim_handle * hdl = get_fd_handle(fd, NULL, NULL);
-    if (!hdl)
-        return -EBADF;
-
-    int ret = 0;
-
-    if (!(hdl->acc_mode & MAY_WRITE) ||
-        !hdl->fs || !hdl->fs->fs_ops || !hdl->fs->fs_ops->write) {
-        ret = -EACCES;
-        goto out;
-    }
+    if (!(hdl->acc_mode & MAY_WRITE) || !hdl->fs || !hdl->fs->fs_ops || !hdl->fs->fs_ops->write)
+        return -EACCES;
 
     ssize_t bytes = 0;
 
-    for (int i = 0 ; i < vlen ; i++)
-    {
+    for (size_t i = 0 ; i < vlen ; i++) {
         int b_vec;
 
         if (!vec[i].iov_base)
             continue;
 
         b_vec = hdl->fs->fs_ops->write(hdl, vec[i].iov_base, vec[i].iov_len);
-        if (b_vec < 0) {
-            ret = bytes ? : b_vec;
-            goto out;
-        }
-
+        if (b_vec < 0)
+            return bytes ? : b_vec;
         bytes += b_vec;
+    }
+
+    return bytes;
+}
+
+ssize_t shim_do_writev(int fd, const struct iovec* vec, size_t vlen) {
+    ssize_t ret = check_iovec(vec, vlen, false);
+    if (ret < 0)
+        return ret;
+
+    struct shim_handle* hdl = get_fd_handle(fd, NULL, NULL);
+    if (!hdl)
+        return -EBADF;
+
+    ret = do_handle_writev(hdl, vec, vlen);
+    put_handle(hdl);
+    return ret;
+}
+
+ssize_t shim_do_preadv(int fd, const struct iovec* vec, size_t vlen, off_t pos_l, off_t pos_h) {
+
+    loff_t pos = pos_l | ((loff_t) pos_h) << 32;
+    if (pos < 0)
+        return -EINVAL;
+
+    ssize_t ret = check_iovec(vec, vlen, true);
+    if (ret < 0)
+        return ret;
+
+    struct shim_handle* hdl = get_fd_handle(fd, NULL, NULL);
+    if (!hdl)
+        return -EBADF;
+
+    loff_t old_pos = set_handle_offset(hdl, pos);
+    if (old_pos < 0) {
+        ret = (ssize_t) old_pos;
+        goto out;
+    }
+
+    ssize_t bytes = do_handle_readv(hdl, vec, vlen);
+
+    loff_t new_pos = set_handle_offset(hdl, old_pos);
+    if (new_pos < 0) {
+        ret = (ssize_t) new_pos;
+        goto out;
     }
 
     ret = bytes;
@@ -145,3 +194,37 @@ out:
     put_handle(hdl);
     return ret;
 }
+
+ssize_t shim_do_pwritev(int fd, const struct iovec* vec, size_t vlen, off_t pos_l, off_t pos_h) {
+    loff_t pos = pos_l | ((loff_t) pos_h) << 32;
+    if (pos < 0)
+        return -EINVAL;
+
+    ssize_t ret = check_iovec(vec, vlen, false);
+    if (ret < 0)
+        return ret;
+
+    struct shim_handle* hdl = get_fd_handle(fd, NULL, NULL);
+    if (!hdl)
+        return -EBADF;
+
+    loff_t old_pos = set_handle_offset(hdl, pos);
+    if (old_pos < 0) {
+        ret = (ssize_t) old_pos;
+        goto out;
+    }
+
+    ssize_t bytes = do_handle_writev(hdl, vec, vlen);
+
+    loff_t new_pos = set_handle_offset(hdl, old_pos);
+    if (new_pos < 0) {
+        ret = (ssize_t) new_pos;
+        goto out;
+    }
+
+    ret = bytes;
+out:
+    put_handle(hdl);
+    return ret;
+}
+
