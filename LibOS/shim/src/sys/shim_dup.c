@@ -66,6 +66,11 @@ int shim_do_dup2 (int oldfd, int newfd)
 
 int shim_do_dup3 (int oldfd, int newfd, int flags)
 {
+    if (oldfd == newfd)
+        return -EINVAL;
+    if (flags & ~O_CLOEXEC)
+        return -EINVAL;
+
     struct shim_handle_map * handle_map = get_cur_handle_map(NULL);
     struct shim_handle * hdl = get_fd_handle(oldfd, NULL, handle_map);
     if (!hdl)
@@ -76,7 +81,7 @@ int shim_do_dup3 (int oldfd, int newfd, int flags)
     if (new_hdl)
         close_handle(new_hdl);
 
-    int vfd = set_new_fd_handle_by_fd(newfd, hdl, flags, handle_map);
+    int vfd = set_new_fd_handle_by_fd(newfd, hdl, flags == O_CLOEXEC ? FD_CLOEXEC : 0, handle_map);
     put_handle(hdl);
     return vfd < 0 ? -EMFILE : vfd;
 }
