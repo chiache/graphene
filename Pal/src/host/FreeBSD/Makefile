@@ -25,7 +25,7 @@ export DEBUG
 endif
 
 pal-gdb: pal-gdb.template
-	sed -e 's:\$$(PAL_DIR):$(PWD):g' $< > $@
+	sed -e 's:\$$(RUNTIME):$(RUNTIME_DIR):g' -e 's:\$$(PAL):$(PAL_DIR):g' $< > $@
 	chmod 755 $@
 
 libpal-FreeBSD.a: $(addsuffix .o,$(objs)) $(graphene_lib)
@@ -49,7 +49,7 @@ libpal-FreeBSD.a: $(addsuffix .o,$(objs)) $(graphene_lib)
 
 include ../../../../Makefile.rules
 
-CLEAN_FILES += $(notdir $(pal_static) $(pal_lib) $(pal_sec) $(pal_loader))
+CLEAN_FILES += $(notdir $(pal_static) $(pal_lib) $(pal_sec) $(pal_loader)) pal-gdb
 
 .PHONY: clean
 clean:

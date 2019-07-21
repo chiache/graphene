@@ -84,7 +84,7 @@ int set_sighandler (int * sigs, int nsig, void * handler)
     }
 
 #ifdef DEBUG
-    if (!linux_state.in_gdb)
+    if (!bsd_state.in_gdb)
 #endif
         action.sa_flags |= SA_NOCLDWAIT;
 
@@ -350,7 +350,7 @@ void signal_setup (void)
     int ret, sig = SIGCHLD;
 
 #ifdef DEBUG
-    if (!linux_state.in_gdb)
+    if (!bsd_state.in_gdb)
 #endif
         set_sighandler(&sig, 1, NULL);
 

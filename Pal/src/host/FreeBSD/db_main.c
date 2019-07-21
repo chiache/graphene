@@ -60,6 +60,9 @@ struct pal_sec pal_sec;
 static int pagesz = PRESET_PAGESIZE;
 static uid_t uid;
 static gid_t gid;
+#ifdef DEBUG
+static bool in_gdb = false;
+#endif
 
 static void pal_init_bootstrap (void * args, const char ** pal_name,
                                 int * pargc,
@@ -98,6 +101,18 @@ static void pal_init_bootstrap (void * args, const char ** pal_name,
     const char ** envp = argv + argc + 1;
 
     /* fetch environment information from aux vectors */
+    const char ** e = envp;
+#ifdef DEBUG
+    for (; *e ; e++)
+        if ((*e)[0] == 'I' && (*e)[1] == 'N' && (*e)[2] == '_' &&
+            (*e)[3] == 'G' && (*e)[4] == 'D' && (*e)[5] == 'B' &&
+            (*e)[6] == '=' && (*e)[7] == '1' && !(*e)[8])
+            in_gdb = true;
+#else
+    for (; *e ; e++);
+#endif
+
+    /* fetch environment information from aux vectors */
     void ** auxv = (void **) envp + 1;
     for (; *(auxv - 1); auxv++);
     ElfW(auxv_t) *av;
@@ -129,6 +144,17 @@ static void pal_init_bootstrap (void * args, const char ** pal_name,
         }
 
     *pal_name = argv[0];
+#ifdef DEBUG
+    if (in_gdb) {
+        size_t len = strlen(*pal_name);
+        argv++;
+        argc--;
+        while (memcmp(*pal_name, *argv, len)) {
+            argv++;
+            argc--;
+        }
+    }
+#endif
     argv++;
     argc--;
     *pargc = argc;
@@ -224,6 +250,9 @@ void pal_bsd_main (void * args)
     pal_map.l_ld = (void*) elf_machine_dynamic(&pal_map);
     elf_get_dynamic_info(pal_map.l_ld, pal_map.l_info, pal_map.l_addr);
     ELF_DYNAMIC_RELOCATE(&pal_map);
+#ifdef DEBUG
+    bsd_state.in_gdb = true;
+#endif
 
     init_slab_mgr(pagesz);
     setup_pal_map(&pal_map);

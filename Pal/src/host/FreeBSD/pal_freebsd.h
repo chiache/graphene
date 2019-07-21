@@ -50,6 +50,10 @@ extern struct pal_bsd_state {
     /* state */
     unsigned long   start_time;
 
+#ifdef DEBUG
+    bool            in_gdb;
+#endif
+
     /* credentails */
     unsigned int    pid;
     unsigned int    uid, gid;

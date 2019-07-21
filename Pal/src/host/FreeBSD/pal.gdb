@@ -3,9 +3,23 @@ echo Graphene GDB Script loaded\n
 set env IN_GDB = 1
 
 handle SIGCONT pass noprint nostop
+handle SIGKILL pass print stop
 
-#set disable-randomization off
+# set disable-randomization off
 set detach-on-fork off
 set schedule-multiple on
-set follow-exec-mode same
 set follow-fork-mode child
+
+break pal_start
+command
+    silent
+    set scheduler-locking off
+    continue
+end
+
+catch vfork
+command
+    silent
+    set scheduler-locking on
+    continue
+end
