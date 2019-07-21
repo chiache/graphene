@@ -231,7 +231,7 @@ PAL_HANDLE socket_create_handle (int type, int fd, int options,
 
     options = HOST_SOCKET_OPTIONS(options);
 
-    memset(hdl, 0, sizeof(union pal_handle));
+    memset(hdl, 0, sizeof(*hdl));
     PAL_GET_TYPE(hdl) = type;
     hdl->hdr.flags |= RFD(0)|(type != pal_type_tcpsrv ? WFD(0) : 0);
     hdl->sock.fd = fd;

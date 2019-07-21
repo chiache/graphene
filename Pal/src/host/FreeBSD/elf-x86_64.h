@@ -33,9 +33,10 @@
    first element of the GOT.  This must be inlined in a function which
    uses global data.  */
 static inline Elf64_Addr __attribute__ ((unused))
-elf_machine_dynamic (void)
-{
-    Elf64_Addr addr;
-    addr = (Elf64_Addr) &_DYNAMIC;
+elf_machine_dynamic(struct link_map* map) {
+    Elf64_Addr addr = map->l_addr;
+    for (const Elf64_Phdr* p = map->l_phdr; p < map->l_phdr + map->l_phnum; p++)
+        if (p->p_type == PT_DYNAMIC)
+            addr += p->p_vaddr;
     return addr;
 }

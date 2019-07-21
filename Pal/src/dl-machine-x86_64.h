@@ -52,12 +52,12 @@ elf_machine_rela (struct link_map *l, Elf64_Rela *reloc, Elf64_Sym *sym,
 #define debug_reloc(r_type)                                         \
     do {                                                            \
         if (strtab && sym && sym->st_name)                          \
-            printf("%p " #r_type ": %s %p\n", reloc_addr,           \
-                   strtab + sym->st_name, value);                   \
+            printf("%p " #r_type ": %s %p\n", (void*)reloc_addr,    \
+                   strtab + sym->st_name, (void*)value);            \
         else if (value)                                             \
-            printf("%p " #r_type ": %p\n", reloc_addr, value);      \
+            printf("%p " #r_type ": %p\n", (void*)reloc_addr, (void*)value); \
         else                                                        \
-            printf("%p " #r_type "\n", reloc_addr, value);          \
+            printf("%p " #r_type "\n", (void*)reloc_addr);          \
     } while (0)
 #else
 #define debug_reloc(...)  do {} while (0)

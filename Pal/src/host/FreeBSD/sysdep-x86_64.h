@@ -27,6 +27,14 @@
 /* BSD useds SYS_* sys call names, so we can use these to map syscall names to syscall numbers from syscall.h */
 #define SYS_ifyBSD(syscall_name) SYS_##syscall_name
 
+#ifndef SYS_stat
+#define SYS_stat SYS_freebsd11_stat
+#endif
+
+#ifndef SYS_getdents
+#define SYS_getdents SYS_freebsd11_getdents
+#endif
+
 #ifdef __ASSEMBLER__
 
 /* ELF uses byte-counts for .align, most others use log2 of count of bytes.  */

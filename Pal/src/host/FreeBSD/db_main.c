@@ -65,7 +65,9 @@ static void pal_init_bootstrap (void * args, const char ** pal_name,
                                 int * pargc,
                                 const char *** pargv,
                                 const char *** penvp,
-                                ElfW(Addr) * baseaddr)
+                                ElfW(Addr) * baseaddr,
+                                const ElfW(Phdr) ** pphdr,
+                                ElfW(Half) * pphnum)
 {
     /*
      * fetch arguments and environment variables, the previous stack
@@ -100,6 +102,8 @@ static void pal_init_bootstrap (void * args, const char ** pal_name,
     for (; *(auxv - 1); auxv++);
     ElfW(auxv_t) *av;
     ElfW(Addr) base = 0;
+    const ElfW(Phdr) * phdr = NULL;
+    ElfW(Half) phnum = 0;
     for (av = (ElfW(auxv_t) *)auxv ; av->a_type != AT_NULL ; av++)
         switch (av->a_type) {
             case AT_PAGESZ:
@@ -116,6 +120,12 @@ static void pal_init_bootstrap (void * args, const char ** pal_name,
             case AT_BASE:
                 base = (ElfW(Addr)) av->a_un.a_val;
                 break;
+            case AT_PHDR:
+                phdr = (const ElfW(Phdr) *) av->a_un.a_val;
+                break;
+            case AT_PHENT:
+                phnum = (ElfW(Half)) av->a_un.a_val;
+                break;
         }
 
     *pal_name = argv[0];
@@ -125,6 +135,8 @@ static void pal_init_bootstrap (void * args, const char ** pal_name,
     *pargv = argv;
     *penvp = envp;
     *baseaddr = base;
+    *pphdr = phdr;
+    *pphnum = phnum;
 }
 
 unsigned long _DkGetPagesize (void)
@@ -206,10 +218,11 @@ void pal_bsd_main (void * args)
     INLINE_SYSCALL(gettimeofday, 2, &time, NULL);
 
     /* parse argc, argv, envp and auxv */
-    pal_init_bootstrap(args, &pal_name, &argc, &argv, &envp, &pal_map.l_addr);
+    pal_init_bootstrap(args, &pal_name, &argc, &argv, &envp, &pal_map.l_addr,
+                       &pal_map.l_phdr, &pal_map.l_phnum);
     pal_map.l_name = pal_name;
-    elf_get_dynamic_info((void *) pal_map.l_addr + elf_machine_dynamic(),
-                         pal_map.l_info, pal_map.l_addr);
+    pal_map.l_ld = (void*) elf_machine_dynamic(&pal_map);
+    elf_get_dynamic_info(pal_map.l_ld, pal_map.l_info, pal_map.l_addr);
     ELF_DYNAMIC_RELOCATE(&pal_map);
 
     init_slab_mgr(pagesz);
