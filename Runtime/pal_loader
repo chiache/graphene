@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 
+MACHINE=$(gcc -dumpmachine)
+
+if [[ "$MACHINE" == "*freebsd*" ]]; then
+	MAKE=$(whick gmake)
+else
+	MAKE=$(which make)
+fi
+
+DIRNAME=$(which dirname)
+
 if [ "$1" == "SGX" ]; then
 	if [ "$SGX" != "0" ]; then
 	    export SGX=1
@@ -15,8 +25,8 @@ if [ "$1" == "SGX" ]; then
 	shift
 fi
 
-RUNTIME_DIR=$(/usr/bin/dirname $(readlink -f ${BASH_SOURCE[0]}))
-PAL_HOST=$(/usr/bin/make --no-print-directory --quiet -f $RUNTIME_DIR/../Pal/src/Makefile.Host print_host 2>&1)
+RUNTIME_DIR=$($DIRNAME $(readlink -f ${BASH_SOURCE[0]}))
+PAL_HOST=$(/usr/local/bin/gmake --no-print-directory --quiet -f $RUNTIME_DIR/../Pal/src/Makefile.Host print_host 2>&1)
 
 MANIFEST=
 PREFIX=
