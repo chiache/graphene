@@ -1,5 +1,4 @@
-SYS ?= $(shell gcc -dumpmachine)
-export SYS
+include ../Pal/src/Makefile.Host
 
 export DEBUG
 
@@ -37,7 +36,7 @@ include ../Makefile.rules
 format:
 	$(MAKE) -C $(SHIM_DIR) format
 
-ifeq ($(findstring x86_64,$(SYS))$(findstring linux,$(SYS)),x86_64linux)
+ifeq ($(BUILD_LINUX_BINARIES),true)
 
 .SECONDARY: $(BUILD_DIR)/Build.success
 

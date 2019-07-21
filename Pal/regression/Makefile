@@ -50,7 +50,8 @@ manifest: manifest.template
 ../src/user_shared_start.o ../src/user_start.o: ../src/user_start.S
 	$(MAKE) -C ../src $(notdir $@)
 
-ifeq ($(findstring x86_64,$(SYS))$(findstring linux,$(SYS)),x86_64linux)
+ifeq ($(BUILD_LINUX_BINARIES),true)
+
 $(preloads): %.so: %.so.c ../src/user_shared_start.o \
 	$(graphene_lib) $(pal_lib) ../include/pal/pal.h
 	@echo [ $@ ]

@@ -4,8 +4,10 @@ ifeq ($(PAL_HOST),)
 SYS := $(shell gcc -dumpmachine)
 ifeq ($(findstring x86_64,$(SYS))$(findstring linux,$(SYS)),x86_64linux)
 PAL_HOST := Linux
+BUILD_LINUX_BINARIES := true
 else ifeq ($(findstring freebsd,$(SYS)),freebsd)
 PAL_HOST := FreeBSD
+BUILD_LINUX_BINARIES := false
 else
 $(error Unsupported platform: $(SYS))
 endif

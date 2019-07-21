@@ -72,7 +72,8 @@ endif
 $(files_to_install): $(RUNTIME_DIR)/%: %
 	$(call cmd,ln_sf)
 
-ifeq ($(findstring x86_64,$(SYS))$(findstring linux,$(SYS)),x86_64linux)
+ifeq ($(BUILD_LINUX_BINARIES),true)
+
 LDFLAGS-libsysdb.so += --version-script shim.map -T shim.lds
 libsysdb.so: $(addsuffix .o,$(objs)) $(filter %.map %.lds,$(LDFLAGS-$@)) \
 	     $(graphene_lib) $(pal_lib)

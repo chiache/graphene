@@ -16,7 +16,8 @@ include ../Makefile
 
 CFLAGS-libos = -L../../../build/libos -I../../include
 
-ifeq ($(findstring x86_64,$(SYS))$(findstring linux,$(SYS)),x86_64linux)
+ifeq ($(BUILD_LINUX_BINARIES),true)
+
 $(c_executables): %: %.c
 	@echo [ $@ ]
 	@$(CC) $(CFLAGS) $(if $(findstring .libos,$@),$(CFLAGS-libos),) -o $@ $< \
